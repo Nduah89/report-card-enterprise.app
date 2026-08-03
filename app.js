@@ -6059,7 +6059,7 @@
     if(role()!=="platform_super_admin")throw new Error("Platform Super Administrator access required");
     if(force||!state.platformPackageConsole)state.platformPackageConsole=await invokePlatformPackageManager("status",{offset:state.platformPackageOffset,limit:state.platformPackageLimit,search:state.platformPackageSearch});
     if(token!==state.viewToken)return;
-    const consoleData=state.platformPackageConsole||{},template=consoleData.template,artifacts=consoleData.artifacts||[],events=consoleData.events||[],packagePlans=consoleData.plans||[],storageCapacity=consoleData.storage_capacity||{},signingStatus=consoleData.signing||{},signingReady=signingStatus.ready===true,releaseHealth=consoleData.release_health||{},canGenerate=consoleData.can_generate===true,canRevoke=consoleData.can_revoke===true,generationBlockers=platformPackageGenerationBlockers(consoleData);
+    const consoleData=state.platformPackageConsole||{},template=consoleData.template,artifacts=consoleData.artifacts||[],events=consoleData.events||[],archives=consoleData.archives||[],packagePlans=consoleData.plans||[],storageCapacity=consoleData.storage_capacity||{},signingStatus=consoleData.signing||{},signingReady=signingStatus.ready===true,releaseHealth=consoleData.release_health||{},canGenerate=consoleData.can_generate===true,canRevoke=consoleData.can_revoke===true,generationBlockers=platformPackageGenerationBlockers(consoleData);
     byId("content").innerHTML=`
       <div class="page-head platform-page-head"><div><h3>GitHub Navigator</h3><p>Platform-owner-only reusable package control</p></div><div class="button-row"><button class="button ghost" id="platformPackageRefresh" type="button">Refresh</button></div></div>
       ${platformSectionTabs("github")}
