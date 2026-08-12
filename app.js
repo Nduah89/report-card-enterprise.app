@@ -5184,7 +5184,7 @@
       <div class="button-row"><button class="button primary" id="fullSchoolBackupCreate" type="button">Create full encrypted backup</button></div>${backupHistoryHtml(backupData?.backups||[])}</section>
       <section class="panel pad"><div class="section-title"><div><h4>Restore a Downloaded School Backup</h4><p>Upload a ZIP package previously downloaded from this school. The server verifies encryption, checksums, school identity and schema compatibility before changing data.</p></div></div>
       <div class="template-information"><strong>Required sequence</strong><span>Install and license the compatible fresh system, sign in as System Administrator with MFA, create a recovery point, upload the backup, type RESTORE SCHOOL, then keep the browser open until final verification succeeds.</span></div>
-      <form id="schoolRestoreForm" class="form-grid compact"><label class="field full"><span>Encrypted school backup ZIP</span><input type="file" name="backup_file" accept=".zip,application/zip" required></label><label class="field full"><span>Typed confirmation</span><input name="confirmation" autocomplete="off" placeholder="RESTORE SCHOOL" required></label><label class="field full"><span>Reason</span><textarea name="reason" minlength="10" placeholder="State why this full restoration is required" required></textarea></label><div class="full button-row"><button class="button danger" id="schoolRestoreStart" type="button">Validate and restore school data</button></div></form>
+      <form id="schoolRestoreForm" class="form-grid compact"><label class="field full"><span>Encrypted school backup ZIP</span><input type="file" name="backup_file" accept=".zip,application/zip,application/x-zip-compressed,application/x-zip,multipart/x-zip" required></label><label class="field full"><span>Typed confirmation</span><input name="confirmation" autocomplete="off" placeholder="RESTORE SCHOOL" required></label><label class="field full"><span>Reason</span><textarea name="reason" minlength="10" placeholder="State why this full restoration is required" required></textarea></label><div class="full button-row"><button class="button danger" id="schoolRestoreStart" type="button">Validate and restore school data</button></div></form>
       ${restoreHistoryHtml(restoreData?.jobs||[])}</section>`;
     byId("fullSchoolBackupCreate")?.addEventListener("click",createManualBackup);
     byId("schoolRestoreStart")?.addEventListener("click",startSchoolRestoreImport);
@@ -5197,7 +5197,7 @@
     if(error)throw error;
     if(data?.currentLevel!=="aal2")throw new Error("Multi-factor authentication required for full school restoration. Sign out, sign in again, and complete the authenticator-code step before restoring data.");
   }
-  async function waitForRestore(jobId,timeoutMs=900000){const start=Date.now();while(Date.now()-start<timeoutMs){const {data,error}=await state.client.from("school_restore_jobs").select("*").eq("id",jobId).single();if(error)throw error;if(data.status==="completed")return data;if(data.status==="failed")throw new Error(data.error_message||"School restoration failed.");await new Promise(r=>setTimeout(r,4000))}throw new Error("The restore is still running. Keep the system in maintenance mode and refresh Backup & Restore shortly.")}
+  async function waitForRestore(jobId,timeoutMs=900000){const start=Date.now();while(Date.now()-start<timeoutMs){const {data,error}=await state.client.from("school_restore_jobs").select("*").eq("id",jobId).single();if(error)throw error;if(data.status==="completed")return data;if(data.status==="failed"||data.status==="cancelled")throw new Error(data.error_message||"School restoration did not complete.");await new Promise(r=>setTimeout(r,4000))}throw new Error("The restore is still running. Keep the system in maintenance mode and refresh Backup & Restore shortly.")}
   async function startSchoolRestoreImport(){
     const form=byId("schoolRestoreForm"),file=form?.elements?.backup_file?.files?.[0],confirmation=String(form?.elements?.confirmation?.value||"").trim(),reason=String(form?.elements?.reason?.value||"").trim(),button=byId("schoolRestoreStart");
     if(!file){toast("Backup required","Choose the downloaded encrypted backup ZIP.","error");return}
@@ -5206,18 +5206,28 @@
     if(!await confirmAction("Restore all school data",`This will replace operational school records and protected files using ${file.name}. A pre-restore recovery backup will be created first. Do not continue while other users are active.`,"Begin restoration",true))return;
     if(!button)return;
     button.disabled=true;setSync("pending","Preparing restore");
+    let preparedJobId="",restoreSubmitted=false;
     try{
       await requireAal2ForRestore();
+      if(!/\.zip$/i.test(file.name)||Number(file.size||0)<=0||file.size>500*1024*1024)throw new Error("Choose a valid encrypted backup ZIP no larger than 500 MB.");
       const checksum=await sha256File(file);
       const prep=await invokeEdgeFunction("scheduled-backup",{action:"prepare_restore_import",file_name:file.name,file_size:file.size,checksum,reason});
       if(!prep?.path||!prep?.token||!prep?.job_id)throw new Error("Restore upload authorization was not returned.");
-      const {error:uploadError}=await state.client.storage.from(CONFIG.backupBucket).uploadToSignedUrl(prep.path,prep.token,file,{contentType:"application/zip"});if(uploadError)throw uploadError;
+      preparedJobId=prep.job_id;
+      // r26 restore ZIP MIME normalization contract: browsers on Windows may label ZIPs
+      // application/x-zip-compressed. Upload the identical bytes with canonical application/zip.
+      const uploadFile=String(file.type||"").toLowerCase()==="application/zip"?file:new File([file],file.name,{type:"application/zip",lastModified:file.lastModified});
+      const {error:uploadError}=await state.client.storage.from(CONFIG.backupBucket).uploadToSignedUrl(prep.path,prep.token,uploadFile,{contentType:"application/zip"});if(uploadError)throw uploadError;
       setSync("pending","Restoring school data");
+      restoreSubmitted=true;
       await invokeEdgeFunction("scheduled-backup",{action:"execute_restore_import",job_id:prep.job_id,confirmation,reason});
       const completed=await waitForRestore(prep.job_id);
       toast("School restoration completed",completed.verification_notes||"Data and protected files were restored and verified.","success",10000);setSync("online","Synced");
       await renderBackupRestore(state.viewToken);
-    }catch(error){toast("School restoration unsuccessful",friendlyError(error),"error",12000);setSync("pending","Attention required")}
+    }catch(error){
+      if(preparedJobId&&!restoreSubmitted)await invokeEdgeFunction("scheduled-backup",{action:"cancel_restore_import",job_id:preparedJobId}).catch(()=>null);
+      toast("School restoration unsuccessful",friendlyError(error),"error",12000);setSync("pending","Attention required")
+    }
     finally{button.disabled=false}
   }
 
