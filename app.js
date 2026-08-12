@@ -453,7 +453,7 @@
     if(msg.includes("Package signing bootstrap SQL is not installed")) return "Install the package-signing Vault bootstrap SQL once, redeploy platform-package-manager, then refresh GitHub Navigator. The signing key will be generated and encrypted automatically.";
     if(/stored package signing public key does not match|package signing metadata repair/i.test(msg)) return "The private package-signing key remains protected. Deploy the current signing-continuity SQL and package manager, then refresh so its public metadata can be reconciled in place.";
     if(/package signing vault|stored package signing key|package signing key fingerprint/i.test(msg)) return "The protected package-signing key could not be read or verified. Apply the current signing recovery patch and review the platform-package-manager logs before generating packages.";
-    if(/not having enough compute resources|compute resources/i.test(msg)) return "Protected-template activation exceeded the Edge Function compute budget. Deploy the r13 compute-safe package manager and frontend, then upload the template again.";
+    if(/not having enough compute resources|compute resources|status code 546|\b546\b/i.test(msg)) return "The protected package operation exceeded the server compute budget. Report Card Enterprise r28 uses a compute-safe STORE-only generated-package path and activation reconciliation. Refresh GitHub Navigator and retry once; if it persists, review the platform-package-manager logs.";
     if(msg.toLowerCase().includes("service configuration unavailable")) return "The scheduled-backup Edge Function is missing its Supabase service configuration. Redeploy it and confirm SUPABASE_URL and the service-role secret are available.";
     if(msg.toLowerCase().includes("bucket not found")) return "A required private Storage bucket is unavailable. Apply the current setup, confirm the system-backups bucket exists, and redeploy scheduled-backup.";
     if(msg.toLowerCase().includes("failed to fetch")||msg.toLowerCase().includes("network")) return "The server could not be reached.";
@@ -6173,7 +6173,11 @@
 
 
   const PACKAGE_LOGO_TYPES=new Set(["image/png"]);
-  const PACKAGE_LOGO_MAX_BYTES=5*1024*1024;
+  const PACKAGE_LOGO_SOURCE_MAX_BYTES=5*1024*1024;
+  // r28 Free-plan generated-package logo budget: accept a normal PNG source, then
+  // normalize it before server generation so four intentional package copies can
+  // never consume the private generated-package file-size headroom.
+  const PACKAGE_LOGO_MAX_BYTES=1000000;
   const PACKAGE_TEMPLATE_MAX_BYTES=48*1000*1000;
 
   function githubNavigatorStepsHtml() {
@@ -6183,6 +6187,40 @@
       <article><b>3</b><div><strong>Download securely</strong><span>The server returns a short-lived signed URL and records every authorized download.</span></div></article>
       <article><b>4</b><div><strong>Deploy and distribute</strong><span>Deploy only GITHUB_PAGES_FRONTEND, then distribute the confirmed Android r6 APK, Windows w1 setup EXE, or privately built school-branded installers.</span></div></article>
     </div>`;
+  }
+
+  async function normalisePackageSchoolLogo(file){
+    if(!file)throw new Error("Select the school logo first.");
+    if(!PACKAGE_LOGO_TYPES.has(String(file.type||"").toLowerCase()))throw new Error("The package school logo must be a PNG image.");
+    if(Number(file.size||0)<=0||file.size>PACKAGE_LOGO_SOURCE_MAX_BYTES)throw new Error("The source school logo must be 5 MB or smaller.");
+    const objectUrl=URL.createObjectURL(file);let image;
+    try{image=await loadImage(objectUrl)}finally{URL.revokeObjectURL(objectUrl)}
+    if(!image?.width||!image?.height)throw new Error("The selected package school logo could not be decoded.");
+    if(image.width<256||image.height<256||image.width>4096||image.height>4096)throw new Error("The package school logo must be between 256 and 4096 pixels on each side.");
+    const ratio=image.width/image.height;if(ratio<0.5||ratio>2)throw new Error("The package school logo must use a reasonably square aspect ratio.");
+    // r28 adaptive PNG normalization contract. Preserve a high-resolution logo where
+    // possible, but progressively reduce the square canvas until the deterministic
+    // 1,000,000-byte package budget is met. The source file itself remains untouched.
+    const sizes=[1024,896,768,640,576,512,480,448,384,320,256];
+    for(const size of sizes){
+      const canvas=document.createElement("canvas");canvas.width=size;canvas.height=size;const ctx=canvas.getContext("2d");if(!ctx)throw new Error("The browser could not prepare the package school logo.");
+      ctx.clearRect(0,0,size,size);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";const pad=Math.max(8,Math.round(size*0.024));drawImageContain(ctx,image,pad,pad,size-pad*2,size-pad*2);
+      const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error("The package school logo could not be encoded.")),"image/png"));canvas.width=1;canvas.height=1;
+      if(blob.size<=PACKAGE_LOGO_MAX_BYTES)return blob;
+    }
+    throw new Error("The normalized package school logo still exceeds 1 MB. Use a simpler PNG logo.");
+  }
+
+  async function reconcileProtectedTemplateActivation(receipt){
+    // r28 activation reconciliation contract: an Edge Function may commit the active
+    // template and then exhaust its response compute budget. Confirm the authoritative
+    // active SHA before telling the operator that installation failed.
+    const expected=String(receipt?.archive_sha256||"").trim().toLowerCase();if(!/^[a-f0-9]{64}$/.test(expected))return null;
+    for(let attempt=0;attempt<3;attempt+=1){
+      await new Promise(resolve=>setTimeout(resolve,700+attempt*500));
+      try{const status=await invokePlatformPackageManager("status",{offset:0,limit:1,search:""}),template=status?.template;if(template&&template.active!==false&&String(template.sha256||"").toLowerCase()===expected)return status}catch{}
+    }
+    return null;
   }
 
   async function invokePlatformPackageManager(action,payload={}) {
@@ -6775,7 +6813,7 @@
             <label class="field"><span>Expiry date and time (optional)</span><input name="expires_at" type="datetime-local"></label>
             <label class="field full"><span>Deployment URL or hostname (optional)</span><input name="authorized_domain" inputmode="url" autocomplete="url" placeholder="https://username.github.io/repository/"><small>Leave blank for project-bound deployment without host locking. A GitHub Pages URL is accepted; a github.com repository URL is not a deployed website.</small></label>
             <label class="field full"><span>User account email domain (optional)</span><input name="email_domain" placeholder="school.edu.gh"><small>Leave blank to use a safe non-deliverable .invalid placeholder.</small></label>
-            <label class="field full"><span>School logo</span><input id="schoolPackageLogo" name="school_logo" type="file" accept="image/png" required><small>PNG only. Maximum 5 MB. Use a square image of at least 256 by 256 pixels.</small></label>
+            <label class="field full"><span>School logo</span><input id="schoolPackageLogo" name="school_logo" type="file" accept="image/png" required><small>PNG source up to 5 MB. It is normalized automatically to a compute/storage-safe PNG of at most 1 MB while preserving a square print-ready image.</small></label>
             <div class="package-logo-preview full"><img id="schoolPackageLogoPreview" src="${CONFIG.logoPath}" alt="Package logo preview"><div><strong id="schoolPackageNamePreview">New school package</strong><span>The official package is generated and signed on the server.</span></div></div>
             <label class="field full"><span>GitHub repository name</span><input name="repository_name" maxlength="80" placeholder="example-academy-report-card" required></label>
             <label class="field full"><span>Supabase Project URL</span><input name="supabase_url" placeholder="https://your-project.supabase.co" required></label>
@@ -6946,8 +6984,15 @@
         authorization=await uploadAttempt();
       }
       button.textContent="Activating";setSync("pending","Activating validated template");
-      await invokePlatformPackageManager("activate_template_upload",{storage_path:authorization.storage_path,filename:file.name,client_validation_receipt:receipt});
-      state.platformPackageConsole=null;toast("Protected template installed","The complete browser checksum scan and compute-safe server validation passed.");await renderGithubNavigator(state.viewToken,true);setSync("online","Synced")
+      let reconciledStatus=null;
+      try{await invokePlatformPackageManager("activate_template_upload",{storage_path:authorization.storage_path,filename:file.name,client_validation_receipt:receipt})}
+      catch(activationError){
+        const message=activationError?.message||String(activationError||"");
+        if(!/compute resources|status code 546|\b546\b|failed to fetch|network|timeout/i.test(message))throw activationError;
+        button.textContent="Confirming";setSync("pending","Confirming active template SHA after interrupted response");
+        reconciledStatus=await reconcileProtectedTemplateActivation(receipt);if(!reconciledStatus)throw activationError;
+      }
+      state.platformPackageConsole=reconciledStatus;toast("Protected template installed",reconciledStatus?"The server commit was confirmed by the active template SHA after an interrupted activation response.":"The complete browser checksum scan and compute-safe server validation passed.");await renderGithubNavigator(state.viewToken,true);setSync("online","Synced")
     }
     catch(error){toast("Template not installed",friendlyError(error),"error",9000);setSync("pending","Retry required")}
     finally{button.disabled=false;button.textContent="Install or replace template"}
@@ -6973,10 +7018,10 @@
       const windowsSummary=includeWindows?` A branded Windows installer build kit will be included for product ${values.windows_product_id} on local port ${values.windows_runtime_port}.`:" The confirmed universal Windows w1 installers will still be included.";
       const deploymentSummary=String(values.authorized_domain||"").trim()?` with host restriction ${String(values.authorized_domain).trim()}`:" without host restriction; the package remains bound to its Supabase project, installation, tenant, and central licence authority";
       const confirmed=await confirmAction("Confirm licensed package entitlement",`${selectedPlan.name} revision ${selectedPlan.revision||1} will be issued to ${values.school_name}${deploymentSummary}. Supabase project: ${String(values.supabase_url).replace(/^https?:\/\//,"").split(".")[0]}. The generated school cannot distribute other packages.${androidSummary}${windowsSummary}`,"Generate signed package");if(!confirmed){setSync("online","Synced");return}
-      progressText.textContent="Reading and validating school logo";const logo_base64=await readFileAsDataUrl(logoFile,PACKAGE_LOGO_MAX_BYTES,PACKAGE_LOGO_TYPES);
-      progressText.textContent="Generating and signing package on the server";
+      progressText.textContent="Normalizing school logo for Free-plan package headroom";const normalizedLogo=await normalisePackageSchoolLogo(logoFile),logo_base64=await readFileAsDataUrl(normalizedLogo,PACKAGE_LOGO_MAX_BYTES,PACKAGE_LOGO_TYPES);
+      progressText.textContent="Generating and signing compute-safe package on the server";
       if(!state.packageGenerationKey)state.packageGenerationKey=crypto.randomUUID();
-      const data=await invokePlatformPackageManager("generate",{...values,include_android_build_kit:includeAndroid,include_windows_build_kit:includeWindows,license_plan_id:selectedPlan.id,license_plan_revision:selectedPlan.revision,idempotency_key:state.packageGenerationKey,logo_base64,logo_mime:logoFile.type,expires_at:values.expires_at?new Date(values.expires_at).toISOString():""});
+      const data=await invokePlatformPackageManager("generate",{...values,include_android_build_kit:includeAndroid,include_windows_build_kit:includeWindows,license_plan_id:selectedPlan.id,license_plan_revision:selectedPlan.revision,idempotency_key:state.packageGenerationKey,logo_base64,logo_mime:"image/png",expires_at:values.expires_at?new Date(values.expires_at).toISOString():""});
       if(!data.signed_url)throw new Error("The package was created but no download authorization was returned.");
       state.packageGenerationKey="";
       const link=document.createElement("a");link.href=data.signed_url;link.rel="noopener";link.click();
