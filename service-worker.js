@@ -5,7 +5,7 @@ function stableScopeHash(value){
 }
 const CACHE_SCOPE_KEY=stableScopeHash(self.registration?.scope||self.location.href);
 const CACHE_FAMILY=`rce-report-card-${CACHE_SCOPE_KEY}-`;
-const CACHE_NAME=`${CACHE_FAMILY}v7-4-0-final-r1-production-stability-r15-prospectus-entitlement-navigation-r16-prospectus-one-page-report-header-r17-universal-school-logo-official-header-r18-logo-entitlement-compatibility-r19-dynamic-report-header-logo-propagation-r20-transparent-document-logo-headers-r21-staff-id-photo-cover-r23-pdfjs-eval-hardening-final-lts-r25-empty-master-uuid-null-guard-r26-restore-zip-mime-fail-closed-recovery-r28-free-plan-compute-safe-package-generation-r30-bounded-history-scroll-safe-reset-r31-license-upgrade-activation-product-stability-r31-jszip-runtime-recovery`;
+const CACHE_NAME=`${CACHE_FAMILY}v7-4-0-final-r1-production-stability-r15-prospectus-entitlement-navigation-r16-prospectus-one-page-report-header-r17-universal-school-logo-official-header-r18-logo-entitlement-compatibility-r19-dynamic-report-header-logo-propagation-r20-transparent-document-logo-headers-r21-staff-id-photo-cover-r23-pdfjs-eval-hardening-final-lts-r25-empty-master-uuid-null-guard-r26-restore-zip-mime-fail-closed-recovery-r28-free-plan-compute-safe-package-generation-r30-bounded-history-scroll-safe-reset-r31-license-upgrade-activation-product-stability-r31-jszip-runtime-recovery-r31-jszip-cacheproof-v2`;
 const STATIC_ASSETS=[
   "./","index.html","style.css","app.js","config.js","manifest.webmanifest",
   "assets/school-logo.png","assets/rce-master-logo.png","assets/rce-master-logo-192.png","assets/rce-master-logo-512.png","assets/rce-master-logo-maskable-512.png","assets/favicon-32.png","assets/approved-terminal-report-template.png","assets/approved-terminal-report-template.pdf",
@@ -34,6 +34,17 @@ self.addEventListener("fetch",event=>{
     return;
   }
   if(url.origin!==self.location.origin){event.respondWith(fetch(request));return;}
+  if(url.pathname.endsWith("/app.js")||url.pathname.endsWith("/assets/vendor/jszip-3.10.1.min.js")){
+    event.respondWith((async()=>{
+      try{const response=await fetch(request,{cache:"no-store"});await cachePut(request,response);return response;}
+      catch{
+        const direct=await cacheMatch(request);if(direct)return direct;
+        const fallback=new Request(new URL(url.pathname,self.location.origin).href,{method:"GET"});
+        return await cacheMatch(fallback)||new Response("Required runtime asset is unavailable.",{status:503,headers:{"Content-Type":"text/plain; charset=utf-8","Cache-Control":"no-store"}});
+      }
+    })());
+    return;
+  }
   if(url.pathname.endsWith("/config.js")){
     event.respondWith((async()=>{
       try{const response=await fetch(request,{cache:"no-store"});await cachePut(request,response);return response;}

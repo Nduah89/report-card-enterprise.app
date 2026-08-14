@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  window.RCE_RUNTIME_BUILD="7.4.0-r31-jszip-cacheproof-v2";
 
   const RUNTIME_CONFIG = window.RCE_CONFIG || window.NIS_CONFIG || {};
   const CONFIG = Object.freeze({
@@ -653,7 +654,7 @@
     window.addEventListener("error",event=>reportClientError(event.error||new Error(event.message),{source:"window"}));
     window.addEventListener("unhandledrejection",event=>reportClientError(event.reason,{source:"promise"}));
     if(!window.RCE_ANDROID_APP&&"serviceWorker" in navigator) {
-      navigator.serviceWorker.register("service-worker.js").catch(()=>{});
+      navigator.serviceWorker.register("service-worker.js?rce=r31-jszip-cacheproof-v2").catch(()=>{});
       navigator.serviceWorker.addEventListener("message",event=>{if(event.data?.type==="FLUSH_OUTBOX")flushOutbox()});
     }
     await refreshPendingCount();
@@ -7014,7 +7015,7 @@
     jsZipRuntimeLoadPromise=new Promise((resolve,reject)=>{
       const finish=()=>{if(window.JSZip&&typeof window.JSZip.loadAsync==="function")resolve(window.JSZip);else reject(new Error("The packaged ZIP validator library loaded but did not initialize."))};
       const script=document.createElement("script");
-      script.src=new URL("assets/vendor/jszip-3.10.1.min.js?rce=7.4.0-r31-jszip-runtime-fix",document.baseURI).href;
+      script.src=new URL("assets/vendor/jszip-3.10.1.min.js?rce=r31-jszip-cacheproof-v2",document.baseURI).href;
       script.async=true;
       script.onload=finish;
       script.onerror=()=>reject(new Error("The packaged ZIP validator library could not be loaded. Refresh the application and try again."));
