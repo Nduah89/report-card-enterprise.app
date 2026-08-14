@@ -1,0 +1,24 @@
+Report Card Enterprise v7.4.0 r32
+Dedicated School Plan Upgrade Navigation
+
+PURPOSE
+r32 makes the r31 one-time licence plan-upgrade activation workflow directly discoverable to existing and future generated-school System Administrators.
+
+SCOPE
+- Adds a dedicated System Administrator navigation item: Plan Upgrade.
+- Keeps Licence and Capacity as the read-only entitlement/capacity console.
+- Reuses the r31 cryptographic upgrade protocol and existing license-verifier preview_upgrade / activate_upgrade actions.
+- Requires MFA/AAL2 through the existing r31 activation session gate.
+- Supports Starter -> Professional, Starter -> Enterprise, and Professional -> Enterprise.
+- Enterprise displays Highest plan active and exposes no higher code-based activation path.
+- Does not change licence reference, dates, package ID, installation ID, project, tenant, authority or distributor binding.
+- No database migration is required for schools already on the r31 schema/licence-verifier baseline.
+
+EXISTING SCHOOL DEPLOYMENT
+Nipe International School received an r32 compatibility frontend deployment that adds the dedicated Plan Upgrade navigation while preserving its existing config.js, database and signed Professional licence.
+
+FUTURE GENERATED SCHOOLS
+The master protected package template was promoted to the native r32 frontend implementation so future generated school packages carry Plan Upgrade directly in the System Administrator navigation.
+
+ROLLBACK
+The r31 frozen release remains the release-level rollback baseline. Nipe also has a dedicated pre-r32 GitHub rollback branch.
