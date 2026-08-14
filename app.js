@@ -5854,6 +5854,48 @@
   function featureFlagLabel(value="") {
     return String(value||"").replaceAll("_"," ").replace(/\b\w/g,char=>char.toUpperCase());
   }
+  async function invokeLicenseVerifier(action,payload={}) {
+    const {data,error}=await state.client.functions.invoke("license-verifier",{body:{action,...payload}});
+    if(error)throw new Error(await edgeFunctionErrorMessage(error,data));
+    if(!data?.ok)throw new Error(data?.error||"Licence verification operation failed");
+    return data;
+  }
+  function licenceUpgradeCapacityRows(currentPlan={},targetPlan={}) {
+    const rows=[
+      ["Students","max_students","records"],["Teachers","max_teachers","records"],["System Administrators","max_system_admins","accounts"],["Guardians","max_guardians","accounts"],["Storage","max_storage_mb","MB"]
+    ];
+    return rows.map(([label,key,unit])=>({label,key,unit,from:currentPlan[key]??null,to:targetPlan[key]??null}));
+  }
+  function licenceUpgradePreviewHtml(currentPlan={},preview={}) {
+    const target=preview.target_plan||{},currentFeatures=effectiveLicenseFeatureFlags(currentPlan.feature_flags||{}),targetFeatures=effectiveLicenseFeatureFlags(target.feature_flags||{});
+    const added=Object.entries(targetFeatures).filter(([key,enabled])=>enabled===true&&currentFeatures[key]!==true).map(([key])=>key);
+    const capacities=licenceUpgradeCapacityRows(currentPlan,target);
+    return `<div class="upgrade-preview-stack">
+      <div class="template-information success"><strong>${esc(featureFlagLabel(preview.from_plan_code||currentPlan.code||"Current"))} → ${esc(target.name||featureFlagLabel(preview.to_plan_code||target.code||"Upgraded plan"))}</strong><span>This authorization changes only the signed plan entitlement. Licence reference, deployment binding, and existing licence dates remain unchanged.</span><small>Activation code expires ${esc(isoDateTime(preview.expires_at))}</small></div>
+      <div class="table-wrap"><table><thead><tr><th>Capacity</th><th>Current</th><th>After upgrade</th></tr></thead><tbody>${capacities.map(item=>`<tr><td>${esc(item.label)}</td><td>${esc(capacityDisplayValue(item.from,item.unit))}</td><td><strong>${esc(capacityDisplayValue(item.to,item.unit))}</strong></td></tr>`).join("")}</tbody></table></div>
+      <div><strong>Newly enabled features</strong>${added.length?`<div class="chip-grid" style="margin-top:8px">${added.map(key=>`<span class="chip success">${esc(featureFlagLabel(key))}</span>`).join("")}</div>`:`<p class="muted">No additional feature flags are required; this upgrade increases capacity or support entitlement.</p>`}</div>
+    </div>`;
+  }
+  function openLicenceUpgradeActivation(currentPlan={}) {
+    modal("Upgrade Licence Plan","Enter the one-time upgrade activation code issued specifically for this school installation. Multi-factor authentication is required.",`<form id="licenceUpgradeActivationForm" class="form-stack">
+      <div class="template-information"><strong>Current plan: ${esc(currentPlan.name||featureFlagLabel(currentPlan.code||"Unknown"))}</strong><span>Supported paths are Starter → Professional, Starter → Enterprise, and Professional → Enterprise.</span><small>Renewals, expiry changes, and exceptional licence changes remain under Renew or Upgrade School Licence.</small></div>
+      <label class="field"><span>Upgrade activation code</span><input id="licenceUpgradeCode" name="upgrade_code" maxlength="34" autocomplete="off" spellcheck="false" placeholder="RCE-UPG-XXXX-XXXX-XXXX-XXXX-XXXX" pattern="RCE-UPG-[A-Z2-9]{4}(-[A-Z2-9]{4}){4}" required><small>The code is installation-bound, single-use, and time-limited.</small></label>
+      <div class="template-information warning"><strong>Security confirmation</strong><span>The code is verified by the central licence authority before any local entitlement changes. No student, report, staff, Storage, or school-setting data is modified.</span></div>
+    </form>`,`<button class="button ghost" id="licenceUpgradeCancel" type="button">Cancel</button><button class="button primary" id="licenceUpgradeVerify" type="button">Verify upgrade</button>`,`medium`);
+    byId("licenceUpgradeCancel").onclick=closeModal;
+    const input=byId("licenceUpgradeCode");input.addEventListener("input",()=>{let value=input.value.toUpperCase().replace(/[^A-Z2-9]/g,"");if(value.startsWith("RCEUPG"))value=value.slice(6);else if(value.startsWith("RCE"))value=value.slice(3);const chunks=value.match(/.{1,4}/g)||[];input.value=`RCE-UPG-${chunks.slice(0,5).join("-")}`.replace(/-$/,"")});
+    byId("licenceUpgradeVerify").onclick=async()=>{
+      const form=byId("licenceUpgradeActivationForm");if(!form.reportValidity())return;
+      const code=input.value.trim().toUpperCase(),button=byId("licenceUpgradeVerify");button.disabled=true;button.textContent="Verifying";
+      try{
+        const result=await invokeLicenseVerifier("preview_upgrade",{upgrade_code:code}),preview=result.preview||{};
+        modal("Confirm Licence Upgrade",`${featureFlagLabel(preview.from_plan_code||currentPlan.code||"")} → ${preview.target_plan?.name||featureFlagLabel(preview.to_plan_code||"")}. Review the signed changes before activation.`,licenceUpgradePreviewHtml(currentPlan,preview),`<button class="button ghost" id="licenceUpgradeBack" type="button">Back</button><button class="button success" id="licenceUpgradeActivate" type="button">Activate ${esc(preview.target_plan?.name||featureFlagLabel(preview.to_plan_code||"upgrade"))}</button>`,`medium`);
+        byId("licenceUpgradeBack").onclick=()=>openLicenceUpgradeActivation(currentPlan);
+        byId("licenceUpgradeActivate").onclick=async()=>{const activate=byId("licenceUpgradeActivate");activate.disabled=true;activate.textContent="Activating securely";try{const activation=await invokeLicenseVerifier("activate_upgrade",{upgrade_code:code});state.schoolLicenseCapacity=null;state.workspace=null;await refreshGeneratedLicenseBinding(true).catch(()=>{});state.boot=await rpc("get_bootstrap_data");renderBrand();renderNav();closeModal();toast("Licence plan upgraded",`The signed ${activation.target_plan?.name||preview.target_plan?.name||featureFlagLabel(preview.to_plan_code||"")} entitlement is now active permanently for this installation.${activation.authority_finalize_pending?" Central finalization will reconcile on the next successful authority check.":""}`,activation.authority_finalize_pending?"warning":"success",11000);await renderSchoolLicenseCapacity(state.viewToken,true)}catch(error){toast("Licence upgrade not activated",friendlyError(error),"error",10000);await reportClientError(error,{source:"license_upgrade_activation"})}finally{if(activate){activate.disabled=false;activate.textContent=`Activate ${preview.target_plan?.name||featureFlagLabel(preview.to_plan_code||"upgrade")}`}}};
+      }catch(error){toast("Upgrade code not verified",friendlyError(error),"error",9000);await reportClientError(error,{source:"license_upgrade_preview"})}finally{if(button){button.disabled=false;button.textContent="Verify upgrade"}}
+    };
+  }
+
   async function renderSchoolLicenseCapacity(token,force=false) {
     if(role()!=="system_admin")throw new Error("School System Administrator access required");
     if(force||!state.schoolLicenseCapacity)state.schoolLicenseCapacity=await rpc("get_school_license_capacity_console");
@@ -5863,10 +5905,10 @@
     const expiryText=snapshot.expires_at?isoDateTime(snapshot.expires_at):status==="perpetual"||String(plan.billing_cycle||"")==="perpetual"?"No expiry":"Not specified";
     const daysRemaining=snapshot.days_remaining===null||snapshot.days_remaining===undefined?"—":number(snapshot.days_remaining);
     byId("content").innerHTML=`
-      <div class="page-head"><div><h3>Licence and Capacity</h3><p>Read-only visibility into the school entitlement, limits, usage, and verification health.</p></div><div class="page-actions"><button class="button secondary" id="licenseCapacityRefresh" type="button">Refresh status</button></div></div>
+      <div class="page-head"><div><h3>Licence and Capacity</h3><p>Signed entitlement, capacity, verification health, and secure plan-upgrade activation.</p></div><div class="page-actions"><button class="button secondary" id="licenseCapacityRefresh" type="button">Refresh status</button></div></div>
       <section class="panel pad">
         <div class="section-title"><div><h4>${esc(plan.name||plan.code||"School licence")}</h4><p>${esc(snapshot.license_reference||"No licence reference")}</p></div><div>${statusBadge(status)}</div></div>
-        ${snapshot.warning?`<div class="template-information warning"><strong>Licence attention</strong><span>${esc(snapshot.warning)}</span></div>`:`<div class="template-information success"><strong>Licence status verified</strong><span>The page is read-only. Licence changes can only be issued by the Platform Super Administrator through a signed renewal or upgrade package.</span></div>`}
+        ${snapshot.warning?`<div class="template-information warning"><strong>Licence attention</strong><span>${esc(snapshot.warning)}</span></div>`:`<div class="template-information success"><strong>Licence status verified</strong><span>The signed entitlement is verified. Plan-only upgrades may be activated below with an authority-issued one-time code; renewals and other licence changes continue through the signed replacement workflow.</span></div>`}
         <div class="metric-row wrap" style="margin-top:14px">
           <div class="metric"><span>Access mode</span><strong>${esc(licenseStatusLabel(accessMode))}</strong><small>${snapshot.write_allowed===false?"Writes restricted":"Writes permitted"}</small></div>
           <div class="metric"><span>Issue date</span><strong>${esc(isoDate(snapshot.issued_on))}</strong><small>Activated ${esc(isoDateTime(snapshot.activated_at))}</small></div>
@@ -5874,6 +5916,7 @@
           <div class="metric"><span>Plan revision</span><strong>${esc(String(plan.revision||snapshot.plan_revision||"—"))}</strong><small>${esc(String(plan.billing_cycle||"custom"))} billing</small></div>
         </div>
       </section>
+      ${CONFIG.generatedSchoolPackage&&["starter","professional"].includes(String(plan.code||"").toLowerCase())?`<section class="panel pad" style="margin-top:18px"><div class="section-title"><div><h4>Upgrade Activation</h4><p>Apply a Platform-authorized plan upgrade without manually replacing the school licence package.</p></div><button class="button primary" id="licenseUpgradeOpen" type="button">Enter upgrade code</button></div><div class="template-information"><strong>Secure one-time activation</strong><span>The code is bound to this licence, project, tenant, and installation. After verification, the newly signed plan features and capacity become the authoritative entitlement immediately.</span><small>Requires an active System Administrator session with MFA (AAL2). Supported upgrades never reduce capacity or remove enabled features.</small></div></section>`:String(plan.code||"").toLowerCase()==="enterprise"?`<section class="panel pad" style="margin-top:18px"><div class="template-information success"><strong>Highest plan active</strong><span>This school is already on the Enterprise plan. No higher code-based plan upgrade is available.</span></div></section>`:""}
       <section class="panel pad" style="margin-top:18px"><div class="section-title"><div><h4>Capacity usage</h4><p>Current active usage against the signed entitlement. Unlimited limits remain unrestricted.</p></div></div>
         ${capacity.length?`<div class="license-capacity-grid">${capacity.map(item=>{const stateInfo=capacityStateLabel(item.used,item.limit),percent=capacityPercent(item.used,item.limit),remaining=item.limit===null||item.limit===undefined?"Unlimited":Math.max(Number(item.limit||0)-Number(item.used||0),0);return `<article class="license-capacity-card"><header><div><strong>${esc(item.label||item.key)}</strong><small>${esc(item.unit||"records")}</small></div><span class="status ${attr(stateInfo.className)}">${esc(stateInfo.label)}</span></header><div class="license-capacity-value"><b>${esc(capacityDisplayValue(item.used,item.unit))}</b><span>of ${esc(capacityDisplayValue(item.limit,item.unit))}</span></div>${Number.isFinite(Number(item.limit))?`<div class="bar-track" aria-label="${attr(number(percent,1))}% used"><span style="width:${percent}%"></span></div><small>${esc(capacityDisplayValue(remaining,item.unit))} remaining • ${number(percent,1)}% used</small>`:`<div class="bar-track"><span style="width:0%"></span></div><small>No signed maximum</small>`}</article>`}).join("")}</div>`:emptyState("No capacity data is available")}
       </section>
@@ -5900,6 +5943,7 @@
         <section class="panel pad"><div class="section-title"><div><h4>Recent verification history</h4><p>The latest licence checks recorded by this school project.</p></div></div>${history.length?`<div class="table-wrap"><table><thead><tr><th>Checked</th><th>Status</th><th>Access</th><th>Source</th></tr></thead><tbody>${history.slice(0,10).map(item=>`<tr><td>${esc(isoDateTime(item.created_at))}</td><td>${statusBadge(item.computed_status)}</td><td>${esc(licenseStatusLabel(item.access_mode))}</td><td>${esc(item.verification_source||"—")}</td></tr>`).join("")}</tbody></table></div>`:emptyState("No verification history recorded yet")}</section>
       </div>`;
     byId("licenseCapacityRefresh").onclick=async()=>{const button=byId("licenseCapacityRefresh");button.disabled=true;button.textContent="Refreshing";try{if(CONFIG.generatedSchoolPackage)await refreshGeneratedLicenseBinding(true).catch(()=>{});state.schoolLicenseCapacity=null;await renderSchoolLicenseCapacity(state.viewToken,true);toast("Licence status refreshed")}catch(error){toast("Licence status not refreshed",friendlyError(error),"error",8000)}finally{if(button){button.disabled=false;button.textContent="Refresh status"}}};
+    if(byId("licenseUpgradeOpen"))byId("licenseUpgradeOpen").onclick=()=>openLicenceUpgradeActivation(plan);
   }
 
   // ---------------------------------------------------------------------------
@@ -6257,6 +6301,14 @@
     return data;
   }
 
+  async function invokeLicenseUpgradeManager(action,payload={}) {
+    if(role()!=="platform_super_admin")throw new Error("Platform Super Administrator access required");
+    const {data,error}=await state.client.functions.invoke("license-upgrade-manager",{body:{action,...payload}});
+    if(error)throw new Error(await edgeFunctionErrorMessage(error,data));
+    if(!data?.ok)throw new Error(data?.error||"Licence upgrade manager operation failed");
+    return data;
+  }
+
   function readFileAsDataUrl(file,maxBytes,allowedTypes=null) {
     return new Promise((resolve,reject)=>{
       if(!file){reject(new Error("Select the required file."));return}
@@ -6277,7 +6329,7 @@
     if(action==="initial")return "Initial issue";
     return `${licenseStatusLabel(action)}${sequence?` R${sequence}`:""}`;
   }
-  function platformPackageActionButtons(item,canGenerate=false,canRevoke=false,hasOpenReplacement=false) {
+  function platformPackageActionButtons(item,canGenerate=false,canRevoke=false,hasOpenReplacement=false,effectivePlanCode="") {
     const ready=item.status==="ready"&&item.deletion_state==="none",replacement=Boolean(item.supersedes_artifact_id),superseded=Boolean(item.superseded_by_artifact_id),finalized=Boolean(item.metadata?.lifecycle?.finalized_at);
     const activeAuthority=ready&&!superseded&&(!replacement||finalized),pendingReplacement=ready&&replacement&&!finalized;
     const actions=[];
@@ -6288,7 +6340,11 @@
     }
     if(activeAuthority&&canGenerate){
       if(hasOpenReplacement)actions.push('<span class="status pending">Replacement pending</span>');
-      else actions.push(`<button class="button primary small" data-package-renew="${attr(item.id)}">Renew / Upgrade</button>`);
+      else {
+        const planCode=String(effectivePlanCode||item.license_plan_code||"").toLowerCase();
+        if(["starter","professional"].includes(planCode))actions.push(`<button class="button success small" data-package-upgrade-code="${attr(item.id)}">Generate Upgrade Code</button>`);
+        actions.push(`<button class="button primary small" data-package-renew="${attr(item.id)}">Renew / Upgrade</button>`);
+      }
     }
     if(ready&&finalized)actions.push('<span class="status approved">Active replacement</span>');
     if(ready&&canRevoke)actions.push(`<button class="button warning small" data-package-revoke="${attr(item.id)}">${pendingReplacement?"Cancel replacement":"Revoke"}</button>`);
@@ -6795,10 +6851,18 @@
 
   async function renderGithubNavigator(token,force=false) {
     if(role()!=="platform_super_admin")throw new Error("Platform Super Administrator access required");
-    if(force||!state.platformPackageConsole)state.platformPackageConsole=await invokePlatformPackageManager("status",{offset:state.platformPackageOffset,limit:state.platformPackageLimit,search:state.platformPackageSearch});
+    if(force||!state.platformPackageConsole){
+      const [packageConsole,upgradeConsole]=await Promise.all([
+        invokePlatformPackageManager("status",{offset:state.platformPackageOffset,limit:state.platformPackageLimit,search:state.platformPackageSearch}),
+        invokeLicenseUpgradeManager("status",{})
+      ]);
+      state.platformPackageConsole={...packageConsole,upgrade_authorizations:upgradeConsole.upgrade_authorizations||[],upgrade_manager_can_generate:upgradeConsole.can_generate===true,upgrade_manager_can_revoke:upgradeConsole.can_revoke===true};
+    }
     if(token!==state.viewToken)return;
-    const consoleData=state.platformPackageConsole||{},template=consoleData.template,artifacts=consoleData.artifacts||[],events=consoleData.events||[],archives=consoleData.archives||[],packagePlans=consoleData.plans||[],storageCapacity=consoleData.storage_capacity||{},signingStatus=consoleData.signing||{},signingReady=signingStatus.ready===true,releaseHealth=consoleData.release_health||{},canGenerate=consoleData.can_generate===true,canRevoke=consoleData.can_revoke===true,generationBlockers=platformPackageGenerationBlockers(consoleData);
+    const consoleData=state.platformPackageConsole||{},template=consoleData.template,artifacts=consoleData.artifacts||[],events=consoleData.events||[],archives=consoleData.archives||[],upgradeAuthorizations=consoleData.upgrade_authorizations||[],packagePlans=consoleData.plans||[],storageCapacity=consoleData.storage_capacity||{},signingStatus=consoleData.signing||{},signingReady=signingStatus.ready===true,releaseHealth=consoleData.release_health||{},canGenerate=consoleData.can_generate===true,canRevoke=consoleData.can_revoke===true,generationBlockers=platformPackageGenerationBlockers(consoleData);
     const readyReplacementTargets=new Set(artifacts.filter(item=>item.status==="ready"&&item.deletion_state==="none"&&item.supersedes_artifact_id).map(item=>String(item.supersedes_artifact_id)));
+    const activatedUpgradeByArtifact=new Map();for(const authorization of upgradeAuthorizations){if(authorization.status==="activated"&&!activatedUpgradeByArtifact.has(String(authorization.artifact_id)))activatedUpgradeByArtifact.set(String(authorization.artifact_id),authorization)}
+    const effectiveArtifactPlanCode=item=>activatedUpgradeByArtifact.get(String(item.id))?.to_plan_code||item.license_plan_code||item.entitlement_snapshot?.plan?.code||"";
     byId("content").innerHTML=`
       <div class="page-head platform-page-head"><div><h3>GitHub Navigator</h3><p>Platform-owner-only reusable package control</p></div><div class="button-row"><button class="button ghost" id="platformPackageRefresh" type="button">Refresh</button></div></div>
       ${platformSectionTabs("github")}
@@ -6864,7 +6928,11 @@
       <section class="panel platform-register-panel" style="margin-top:18px">
         <div class="panel-header"><div><h3>Generated package register</h3><p>Private artifacts and authorized-download history</p></div><span class="status approved">${number(consoleData.artifact_count??artifacts.length)} records</span></div>
         <div class="platform-register-controls"><label class="field"><span>Search packages</span><input id="platformPackageSearch" value="${attr(state.platformPackageSearch)}" placeholder="School, tenant, licence, or filename"></label><div class="button-row"><button class="button secondary small" id="platformPackageSearchApply" type="button">Search</button><button class="button ghost small" id="platformPackageSearchClear" type="button" ${state.platformPackageSearch?"":"disabled"}>Clear</button></div><div class="button-row"><button class="button ghost small" id="platformPackagePrevious" type="button" ${state.platformPackageOffset<=0?"disabled":""}>Previous</button><span class="status neutral">${number(state.platformPackageOffset+1)}-${number(Math.min(state.platformPackageOffset+artifacts.length,consoleData.artifact_count??artifacts.length))}</span><button class="button ghost small" id="platformPackageNext" type="button" ${state.platformPackageOffset+artifacts.length>=(consoleData.artifact_count??artifacts.length)?"disabled":""}>Next</button></div></div>
-        <div class="table-wrap platform-register-scroll"><table><thead><tr><th>Generated</th><th>School and tenant</th><th>Licence</th><th>Package</th><th>Status</th><th>Actions</th></tr></thead><tbody>${artifacts.length?artifacts.map(item=>`<tr><td>${esc(isoDateTime(item.generated_at))}<br><small>${esc(platformPackageLifecycleLabel(item))}</small></td><td><strong>${esc(item.school_name)}</strong><br><small>${esc(item.tenant_code)}${item.authorized_domain?` • ${esc(item.authorized_domain)}`:""}</small></td><td>${esc(item.license_reference)}<br><small>${esc(item.license_plan_code)} • revision ${number(item.plan_revision||1)}</small>${item.supersedes_artifact_id?`<br><small>Replaces ${esc(String(item.metadata?.lifecycle?.supersedes_package_id||item.supersedes_artifact_id).slice(0,18))}…</small>`:""}</td><td><span class="package-filename">${esc(item.filename)}</span><br><small>${readableBytes(item.file_size)} • ${number(item.download_count)} downloads${item.metadata?.android_distribution?.included?` • Android ${esc(item.metadata.android_distribution.application_id||"profile")}`:""}${item.metadata?.windows_distribution?.included?` • Windows ${esc(item.metadata.windows_distribution.product_id||"w1")}`:""}</small></td><td>${platformPackageStatusLabel(item.status)}${item.authority_last_checked_at?`<br><small>School verified ${esc(isoDateTime(item.authority_last_checked_at))}</small>`:""}${item.superseded_at?`<br><small>Superseded ${esc(isoDateTime(item.superseded_at))}</small>`:""}${item.revocation_reason?`<br><small>${esc(item.revocation_reason)}</small>`:""}</td><td><div class="button-row compact package-action-row">${platformPackageActionButtons(item,canGenerate,canRevoke,readyReplacementTargets.has(String(item.id)))}</div></td></tr>`).join(""):`<tr><td colspan="6"><div class="empty">No protected package has been generated</div></td></tr>`}</tbody></table></div>
+        <div class="table-wrap platform-register-scroll"><table><thead><tr><th>Generated</th><th>School and tenant</th><th>Licence</th><th>Package</th><th>Status</th><th>Actions</th></tr></thead><tbody>${artifacts.length?artifacts.map(item=>`<tr><td>${esc(isoDateTime(item.generated_at))}<br><small>${esc(platformPackageLifecycleLabel(item))}</small></td><td><strong>${esc(item.school_name)}</strong><br><small>${esc(item.tenant_code)}${item.authorized_domain?` • ${esc(item.authorized_domain)}`:""}</small></td><td>${esc(item.license_reference)}<br><small>${esc(effectiveArtifactPlanCode(item))} • ${activatedUpgradeByArtifact.has(String(item.id))?`activation upgrade r${number(activatedUpgradeByArtifact.get(String(item.id)).to_plan_revision||1)}`:`revision ${number(item.plan_revision||1)}`}</small>${item.supersedes_artifact_id?`<br><small>Replaces ${esc(String(item.metadata?.lifecycle?.supersedes_package_id||item.supersedes_artifact_id).slice(0,18))}…</small>`:""}</td><td><span class="package-filename">${esc(item.filename)}</span><br><small>${readableBytes(item.file_size)} • ${number(item.download_count)} downloads${item.metadata?.android_distribution?.included?` • Android ${esc(item.metadata.android_distribution.application_id||"profile")}`:""}${item.metadata?.windows_distribution?.included?` • Windows ${esc(item.metadata.windows_distribution.product_id||"w1")}`:""}</small></td><td>${platformPackageStatusLabel(item.status)}${item.authority_last_checked_at?`<br><small>School verified ${esc(isoDateTime(item.authority_last_checked_at))}</small>`:""}${item.superseded_at?`<br><small>Superseded ${esc(isoDateTime(item.superseded_at))}</small>`:""}${item.revocation_reason?`<br><small>${esc(item.revocation_reason)}</small>`:""}</td><td><div class="button-row compact package-action-row">${platformPackageActionButtons(item,canGenerate,canRevoke,readyReplacementTargets.has(String(item.id)),effectiveArtifactPlanCode(item))}</div></td></tr>`).join(""):`<tr><td colspan="6"><div class="empty">No protected package has been generated</div></td></tr>`}</tbody></table></div>
+      </section>
+      <section class="panel platform-register-panel" style="margin-top:18px">
+        <div class="panel-header"><div><h3>Upgrade activation authorizations</h3><p>Installation-bound one-time codes. Plaintext codes are shown only once at generation.</p></div><span class="status neutral">${number(upgradeAuthorizations.length)} recent</span></div>
+        <div class="table-wrap platform-register-scroll"><table><thead><tr><th>Issued</th><th>School / licence</th><th>Upgrade</th><th>Code</th><th>Status</th><th>Action</th></tr></thead><tbody>${upgradeAuthorizations.length?upgradeAuthorizations.map(item=>`<tr><td>${esc(isoDateTime(item.issued_at))}<br><small>Expires ${esc(isoDateTime(item.expires_at))}</small></td><td>${esc(item.metadata?.school_name||item.tenant_code||"School")}<br><small>${esc(item.license_reference||"")}</small></td><td><strong>${esc(featureFlagLabel(item.from_plan_code))} → ${esc(featureFlagLabel(item.to_plan_code))}</strong><br><small>Target revision ${number(item.to_plan_revision||1)}</small></td><td><code>••••-${esc(item.code_hint||"????")}</code></td><td>${statusBadge(item.status)}${item.redeemed_at?`<br><small>Redeemed ${esc(isoDateTime(item.redeemed_at))}</small>`:""}${item.activated_at?`<br><small>Activated ${esc(isoDateTime(item.activated_at))}</small>`:""}</td><td>${item.status==="issued"&&canRevoke?`<button class="button warning small" data-upgrade-code-revoke="${attr(item.id)}">Revoke unused code</button>`:`<span class="status neutral">${item.status==="redeemed_pending_activation"?"Activation pending":"No action"}</span>`}</td></tr>`).join(""):`<tr><td colspan="6"><div class="empty">No upgrade activation codes have been issued</div></td></tr>`}</tbody></table></div>
       </section>
       <section class="panel platform-history-panel" style="margin-top:18px">
         <div class="panel-header"><div><h3>Package security audit</h3><p>Latest 200 package security events</p></div><div class="button-row"><button class="button danger small" id="packageAuditClear" type="button" ${(events.length||archives.length)&&canRevoke?"":"disabled"}>Clear all history</button></div></div>
@@ -6911,6 +6979,8 @@
     if(canGenerate)byId("generateSchoolPackage").onclick=generateReusableSchoolPackage;
     $$('[data-package-download]').forEach(button=>button.onclick=()=>downloadProtectedPackage(button.dataset.packageDownload,button));
     $$('[data-package-renew]').forEach(button=>button.onclick=()=>renewOrUpgradeProtectedPackage(button.dataset.packageRenew,button));
+    $$('[data-package-upgrade-code]').forEach(button=>button.onclick=()=>generatePackageUpgradeCode(button.dataset.packageUpgradeCode,button));
+    $$('[data-upgrade-code-revoke]').forEach(button=>button.onclick=()=>revokePackageUpgradeCode(button.dataset.upgradeCodeRevoke,button));
     $$('[data-package-finalize]').forEach(button=>button.onclick=()=>finalizeReplacementProtectedPackage(button.dataset.packageFinalize,button));
     $$('[data-package-revoke]').forEach(button=>button.onclick=()=>revokeProtectedPackage(button.dataset.packageRevoke,button));
     $$('[data-package-restore]').forEach(button=>button.onclick=()=>restoreProtectedPackage(button.dataset.packageRestore,button));
@@ -6937,14 +7007,29 @@
   }
 
   async function sha256BytesHex(bytes){const hash=await crypto.subtle.digest("SHA-256",bytes);return [...new Uint8Array(hash)].map(byte=>byte.toString(16).padStart(2,"0")).join("")}
+  let jsZipRuntimeLoadPromise=null;
+  async function ensureJSZipRuntime(){
+    if(window.JSZip&&typeof window.JSZip.loadAsync==="function")return window.JSZip;
+    if(jsZipRuntimeLoadPromise)return jsZipRuntimeLoadPromise;
+    jsZipRuntimeLoadPromise=new Promise((resolve,reject)=>{
+      const finish=()=>{if(window.JSZip&&typeof window.JSZip.loadAsync==="function")resolve(window.JSZip);else reject(new Error("The packaged ZIP validator library loaded but did not initialize."))};
+      const script=document.createElement("script");
+      script.src=new URL("assets/vendor/jszip-3.10.1.min.js?rce=7.4.0-r31-jszip-runtime-fix",document.baseURI).href;
+      script.async=true;
+      script.onload=finish;
+      script.onerror=()=>reject(new Error("The packaged ZIP validator library could not be loaded. Refresh the application and try again."));
+      document.head.appendChild(script);
+    });
+    try{return await jsZipRuntimeLoadPromise}catch(error){jsZipRuntimeLoadPromise=null;throw error}
+  }
   function safeProtectedTemplatePath(path){return Boolean(path)&&!path.includes("\0")&&!path.includes("\\")&&!path.startsWith("/")&&!/^[A-Za-z]:/.test(path)&&!path.split("/").some(part=>part===".."||part===".")}
   async function validateProtectedTemplateInBrowser(file,onProgress=()=>{}){
-    if(!window.JSZip)throw new Error("The protected-template ZIP validator is unavailable. Reload the application.");
+    const JSZipRuntime=await ensureJSZipRuntime();
     onProgress("Reading protected template");
     const buffer=await file.arrayBuffer();
     const archive_sha256=await sha256BytesHex(buffer);
     onProgress("Opening ZIP and checking CRC integrity");
-    const zip=await window.JSZip.loadAsync(buffer,{checkCRC32:true});
+    const zip=await JSZipRuntime.loadAsync(buffer,{checkCRC32:true});
     const names=Object.keys(zip.files),files=names.filter(name=>!zip.files[name].dir);
     if(files.length<1||files.length>900)throw new Error(`Template contains an invalid number of files (${files.length}).`);
     const roots=[...new Set(files.filter(name=>name.endsWith("GITHUB_PAGES_FRONTEND/app.js")).map(name=>name.slice(0,-"GITHUB_PAGES_FRONTEND/app.js".length)))];
@@ -7066,11 +7151,39 @@
     const base=Math.max(Date.now(),Number.isFinite(previousTime)?previousTime:0);
     return dateTimeLocalValue(new Date(base+Number(plan.default_term_days||365)*86400000));
   }
+  function platformEffectiveEntitlementForArtifact(artifact={}) {
+    const upgrades=state.platformPackageConsole?.upgrade_authorizations||[];
+    const activated=upgrades.find(item=>String(item.artifact_id)===String(artifact.id)&&item.status==="activated");
+    if(activated?.metadata?.target_plan)return {plan:activated.metadata.target_plan,license:artifact.entitlement_snapshot?.license||{}};
+    return artifact.entitlement_snapshot||{};
+  }
+  function generatePackageUpgradeCode(artifactId,button) {
+    const consoleData=state.platformPackageConsole||{},artifact=(consoleData.artifacts||[]).find(item=>String(item.id)===String(artifactId));if(!artifact)return;
+    const activated=(consoleData.upgrade_authorizations||[]).find(item=>String(item.artifact_id)===String(artifact.id)&&item.status==="activated"),currentCode=String(activated?.to_plan_code||artifact.license_plan_code||artifact.entitlement_snapshot?.plan?.code||"").toLowerCase();
+    const rank={starter:1,professional:2,enterprise:3},plans=(consoleData.plans||[]).filter(plan=>plan.active!==false&&(rank[String(plan.code||"").toLowerCase()]||0)>(rank[currentCode]||0));
+    if(!plans.length){toast("No higher plan available","This school is already on the highest supported plan or its current plan is not eligible for code-based upgrade.","warning");return}
+    modal("Generate Upgrade Activation Code",`${artifact.school_name} • ${featureFlagLabel(currentCode)}. The resulting code can be sent by WhatsApp or email and redeemed only by this installed school.`,`<form id="packageUpgradeCodeForm" class="form-grid">
+      <div class="template-information full"><strong>Current authority plan: ${esc(featureFlagLabel(currentCode))}</strong><span>${esc(artifact.license_reference)} • ${esc(artifact.tenant_code)}</span><small>Licence dates and deployment binding will be preserved exactly.</small></div>
+      <label class="field full"><span>Upgrade to</span><select name="license_plan_id" required>${plans.map(plan=>`<option value="${attr(plan.id)}">${esc(plan.name)} • revision ${number(plan.revision||1)}</option>`).join("")}</select><small id="packageUpgradeCodePlanSummary"></small></label>
+      <label class="field"><span>Code validity</span><select name="validity_days"><option value="7" selected>7 days</option><option value="14">14 days</option><option value="30">30 days</option></select></label>
+      <label class="field full"><span>Authorization reason</span><textarea name="reason" minlength="5" maxlength="500" required placeholder="Example: Paid upgrade from Professional to Enterprise"></textarea></label>
+      <div class="template-information warning full"><strong>One-time display</strong><span>The plaintext activation code is never stored by the browser or database. Copy it from the next screen and send it to the authorized school administrator.</span></div>
+    </form>`,`<button class="button ghost" id="packageUpgradeCodeCancel" type="button">Cancel</button><button class="button success" id="packageUpgradeCodeGenerate" type="button">Generate secure code</button>`,`medium`);
+    const form=byId("packageUpgradeCodeForm"),select=form.elements.license_plan_id,summary=byId("packageUpgradeCodePlanSummary");
+    const sync=()=>{const plan=plans.find(item=>String(item.id)===String(select.value))||{};summary.textContent=`${renewalCapacityText(plan)} • ${Object.entries(plan.feature_flags||{}).filter(([,v])=>v===true).map(([k])=>featureFlagLabel(k)).join(", ")}`};select.onchange=sync;sync();
+    byId("packageUpgradeCodeCancel").onclick=closeModal;
+    byId("packageUpgradeCodeGenerate").onclick=async()=>{if(!form.reportValidity())return;const values=formObject(form),plan=plans.find(item=>String(item.id)===String(values.license_plan_id));if(!plan)return;const action=byId("packageUpgradeCodeGenerate");action.disabled=true;action.textContent="Generating securely";try{const result=await invokeLicenseUpgradeManager("generate",{artifact_id:artifact.id,license_plan_id:plan.id,license_plan_revision:plan.revision,validity_days:Number(values.validity_days||7),reason:values.reason}),code=result.upgrade_code||"";if(!code)throw new Error("Upgrade authorization was created without a display code");modal("Upgrade Activation Code Generated",`${artifact.school_name} • ${featureFlagLabel(result.preview?.from_plan_code||currentCode)} → ${result.preview?.to_plan_name||featureFlagLabel(result.preview?.to_plan_code||plan.code)}. Copy this code now.`,`<div class="upgrade-code-display"><div class="template-information success"><strong>Authorization created</strong><span>Expires ${esc(isoDateTime(result.authorization?.expires_at))}. It is bound to ${esc(artifact.tenant_code)} and this package installation.</span></div><label class="field"><span>One-time activation code</span><div class="copy-field"><input id="generatedUpgradeCode" value="${attr(code)}" readonly><button class="button secondary" id="copyGeneratedUpgradeCode" type="button">Copy</button></div></label><div class="template-information warning"><strong>Do not regenerate unless necessary</strong><span>Only one open code is permitted per school. If this unused code is lost, revoke it in the authorization register before generating another.</span></div></div>`,`<button class="button primary" id="generatedUpgradeCodeDone" type="button">Done</button>`,`medium`);byId("copyGeneratedUpgradeCode").onclick=async()=>{await navigator.clipboard.writeText(code);toast("Upgrade code copied","Send it only to the authorized System Administrator for this school.")};byId("generatedUpgradeCodeDone").onclick=async()=>{closeModal();state.platformPackageConsole=null;await renderGithubNavigator(state.viewToken,true)};toast("Upgrade code generated","Copy the one-time code before closing this dialog.","success",9000)}catch(error){toast("Upgrade code not generated",friendlyError(error),"error",10000);await reportClientError(error,{source:"platform_upgrade_code_generation",artifact_id:artifact.id})}finally{if(action){action.disabled=false;action.textContent="Generate secure code"}}};
+  }
+  function revokePackageUpgradeCode(authorizationId,button) {
+    modal("Revoke Unused Upgrade Code","This prevents the issued code from being redeemed. A code already redeemed for activation cannot be revoked through this action.",`<label class="field"><span>Revocation reason</span><textarea id="upgradeCodeRevokeReason" minlength="5" required></textarea></label>`,`<button class="button ghost" id="upgradeCodeRevokeCancel" type="button">Cancel</button><button class="button warning" id="upgradeCodeRevokeConfirm" type="button">Revoke unused code</button>`,`small`);
+    byId("upgradeCodeRevokeCancel").onclick=closeModal;byId("upgradeCodeRevokeConfirm").onclick=async()=>{const reason=byId("upgradeCodeRevokeReason").value.trim();if(reason.length<5)return;const action=byId("upgradeCodeRevokeConfirm");action.disabled=true;try{await invokeLicenseUpgradeManager("revoke",{authorization_id:authorizationId,reason});closeModal();state.platformPackageConsole=null;toast("Upgrade code revoked");await renderGithubNavigator(state.viewToken,true)}catch(error){toast("Upgrade code not revoked",friendlyError(error),"error",9000)}finally{action.disabled=false}};
+  }
+
   function renewOrUpgradeProtectedPackage(artifactId,button) {
     const consoleData=state.platformPackageConsole||{},artifact=(consoleData.artifacts||[]).find(item=>String(item.id)===String(artifactId));
     if(!artifact){toast("Package not found","Refresh GitHub Navigator and try again.","error");return}
-    const plans=(consoleData.plans||[]).filter(item=>item.active!==false),entitlement=artifact.entitlement_snapshot||{},currentPlan=entitlement.plan||{},currentLicense=entitlement.license||{};
-    const selectedPlan=plans.find(item=>String(item.id)===String(currentPlan.id))||plans.find(item=>String(item.code)===String(artifact.license_plan_code))||plans[0];
+    const plans=(consoleData.plans||[]).filter(item=>item.active!==false),activated=(consoleData.upgrade_authorizations||[]).find(item=>String(item.artifact_id)===String(artifact.id)&&item.status==="activated"),entitlement=artifact.entitlement_snapshot||{},currentPlan=activated?plans.find(item=>String(item.code)===String(activated.to_plan_code))||entitlement.plan||{}:entitlement.plan||{},currentLicense=entitlement.license||{};
+    const selectedPlan=plans.find(item=>String(item.code)===String(currentPlan.code))||plans.find(item=>String(item.id)===String(currentPlan.id))||plans.find(item=>String(item.code)===String(artifact.license_plan_code))||plans[0];
     if(!selectedPlan){toast("No active plan","Create or activate a licence plan before renewing.","error");return}
     const sequence=Number(artifact.renewal_sequence||artifact.metadata?.lifecycle?.renewal_sequence||0)+1,referenceBase=String(artifact.license_reference||"RCE-LICENCE").replace(/-R\d+$/i,""),defaultReference=`${referenceBase}-R${sequence}`;
     modal("Renew or Upgrade School Licence",`${artifact.school_name} • ${artifact.tenant_code}. A new signed replacement package will be generated. The current package stays active until the replacement is installed, verified, and finalized.`,`<form id="packageRenewForm" class="form-grid">
