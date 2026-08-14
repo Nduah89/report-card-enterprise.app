@@ -1,0 +1,26 @@
+name: r32 post-acceptance backup once
+on:
+  push:
+    branches:
+      - ops/r32-post-acceptance-backup
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Backup and verify Enterprise master
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 300 \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZXJrY2R1eGdqdmF1Z3hzZmVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NTA2NTcsImV4cCI6MjEwMTMyNjY1N30.pC2IqIX38DwmfH06iEu-OLwB7GvjL-Ocd0NrI5s0IV0' \
+            -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZXJrY2R1eGdqdmF1Z3hzZmVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NTA2NTcsImV4cCI6MjEwMTMyNjY1N30.pC2IqIX38DwmfH06iEu-OLwB7GvjL-Ocd0NrI5s0IV0' \
+            'https://ezerkcduxgjvaugxsfel.supabase.co/functions/v1/r32-post-acceptance-backup'
+      - name: Backup and verify Nipe
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 300 \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdtYmNod3Z2ZHd1bG9sZ3RzbmZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NjQ3MDksImV4cCI6MjEwMTM0MDcwOX0.LoylzonzqbcoUBrU3Vj98fKSBbs9yOMo9poXfp6WUlY' \
+            -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdtYmNod3Z2ZHd1bG9sZ3RzbmZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NjQ3MDksImV4cCI6MjEwMTM0MDcwOX0.LoylzonzqbcoUBrU3Vj98fKSBbs9yOMo9poXfp6WUlY' \
+            'https://gmbchwvvdwulolgtsnfs.supabase.co/functions/v1/r32-backup-trigger'
