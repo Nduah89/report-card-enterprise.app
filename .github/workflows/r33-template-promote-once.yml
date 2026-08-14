@@ -1,18 +1,18 @@
-name: r33 protected template promotion once
+name: r33 protected template promotion diagnostic
 on:
   push:
     branches:
       - ops/r33-backup-probe-acceptance
 jobs:
-  promote:
+  diagnose:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Promote r33 protected template
+      - name: Capture promotion failure stage
         run: |
           curl --fail-with-body --silent --show-error --max-time 420 \
             -X POST \
             -H 'Content-Type: application/json' \
             -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZXJrY2R1eGdqdmF1Z3hzZmVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NTA2NTcsImV4cCI6MjEwMTMyNjY1N30.pC2IqIX38DwmfH06iEu-OLwB7GvjL-Ocd0NrI5s0IV0' \
             -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZXJrY2R1eGdqdmF1Z3hzZmVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NTA2NTcsImV4cCI6MjEwMTMyNjY1N30.pC2IqIX38DwmfH06iEu-OLwB7GvjL-Ocd0NrI5s0IV0' \
-            'https://ezerkcduxgjvaugxsfel.supabase.co/functions/v1/r33-template-promoter'
+            'https://ezerkcduxgjvaugxsfel.supabase.co/functions/v1/r33-template-promoter-diagnostic'
