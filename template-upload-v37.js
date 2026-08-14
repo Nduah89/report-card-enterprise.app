@@ -90,3 +90,4 @@
     catch (error) { notify("Template not installed", error?.message || String(error)); }
   }, true);
 })();
+// Pages rebuild marker: r31-template-upload-v37
