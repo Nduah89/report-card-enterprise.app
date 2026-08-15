@@ -1,0 +1,46 @@
+name: Assemble r37 final-ui8 generator
+
+on:
+  push:
+    branches:
+      - fix/r37-generator-final-ui8-payload
+    paths:
+      - '.github/workflows/assemble-r37-final-ui8-generator.yml'
+      - 'r37-final-ui8-generator-payload/**'
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Assemble and verify transformed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat r37-final-ui8-generator-payload/part00.b64 \
+              r37-final-ui8-generator-payload/part01.b64 \
+              r37-final-ui8-generator-payload/part02.b64 \
+              r37-final-ui8-generator-payload/part03.b64 > /tmp/r37-final-ui8.b64
+          base64 -d /tmp/r37-final-ui8.b64 > /tmp/r37-final-ui8.ts.gz
+          gzip -dc /tmp/r37-final-ui8.ts.gz > /tmp/r37-final-ui8.ts
+          test "$(wc -c < /tmp/r37-final-ui8.ts | tr -d ' ')" = "196780"
+          test "$(sha256sum /tmp/r37-final-ui8.ts | awk '{print $1}')" = "081a0d16220734a70fa0d18be9e96d714f24b6df5c49c45fa0971b943d9d29c6"
+          mkdir -p supabase/functions/platform-package-manager
+          cp /tmp/r37-final-ui8.ts supabase/functions/platform-package-manager/r37-final-ui-8-transformed-reference.ts
+      - name: Commit verified transformed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add supabase/functions/platform-package-manager/r37-final-ui-8-transformed-reference.ts
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Stage checksum-verified r37 final-ui8 generator source'
+          git push origin HEAD:fix/r37-generator-final-ui8-payload
