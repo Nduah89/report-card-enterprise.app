@@ -1,14 +1,9 @@
-# Edusentia r37 Unified Login Hero Acceptance
+# Edusentia r37 Login Hero Final Acceptance
 
-Date: 2026-08-15
+Status: photographic campus hero asset staged for live production.
 
-Purpose: production deployment marker for the final unified login hero release.
+Approved hero Git blob SHA: `4c8162d4e10a4508e2897a969824fc685a1fb2e0`
 
-Accepted implementation:
-- one WebP hero asset: assets/edusentia-login-hero-r37.webp
-- active stylesheet generation: r37-final-ui-4
-- active service-worker cache generation: v7-4-0-r37-edusentia-final-ui-4
-- legacy four-slice background assets are no longer referenced by the active login CSS or service-worker precache list
-- authentication IDs, form semantics, MFA flow and licence bindings remain unchanged
+The login hero uses the established DOM-backed image layer. Authentication logic, MFA, element IDs, licence bindings, academic data, and the immutable r36 protected-template baseline are unchanged.
 
-This marker contains no runtime logic and exists only to record and retrigger the final Pages deployment after a transient zero-duration Pages build failure.
+Visual acceptance remains conditional on final browser screenshot verification after deployment.
