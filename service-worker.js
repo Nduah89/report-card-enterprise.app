@@ -4,11 +4,12 @@ function stableScopeHash(value){
   return (hash>>>0).toString(36);
 }
 const CACHE_SCOPE_KEY=stableScopeHash(self.registration?.scope||self.location.href);
-// Keep the historical cache family so r36 can evict every earlier RCE/Edusentia cache for this installation.
+// Keep the historical cache family so r37 evicts every earlier RCE/Edusentia cache for this installation.
 const CACHE_FAMILY=`rce-report-card-${CACHE_SCOPE_KEY}-`;
-const CACHE_NAME=`${CACHE_FAMILY}v7-4-0-final-r1-production-stability-r15-prospectus-entitlement-navigation-r16-prospectus-one-page-report-header-r17-universal-school-logo-official-header-r18-logo-entitlement-compatibility-r19-dynamic-report-header-logo-propagation-r20-transparent-document-logo-headers-r21-staff-id-photo-cover-r23-pdfjs-eval-hardening-final-lts-r25-empty-master-uuid-null-guard-r26-restore-zip-mime-fail-closed-recovery-r28-free-plan-compute-safe-package-generation-r30-bounded-history-scroll-safe-reset-r31-license-upgrade-activation-product-stability-r31-jszip-runtime-recovery-r31-jszip-cacheproof-v2-r36-edusentia-brand`;
+const CACHE_NAME=`${CACHE_FAMILY}v7-4-0-r37-edusentia-product-ready`;
 const STATIC_ASSETS=[
   "./","index.html","style.css","app.js","config.js","manifest.webmanifest",
+  "assets/edusentia-logo.png","assets/edusentia-logo-192.png","assets/edusentia-logo-512.png","assets/edusentia-mark.svg",
   "assets/school-logo.png","assets/rce-master-logo.png","assets/rce-master-logo-192.png","assets/rce-master-logo-512.png","assets/rce-master-logo-maskable-512.png","assets/favicon-32.png","assets/approved-terminal-report-template.png","assets/approved-terminal-report-template.pdf",
   "assets/vendor/supabase-2.110.5.js","assets/vendor/qrcode-1.0.0.min.js",
   "assets/vendor/pdfjs-3.11.174.min.js","assets/vendor/pdfjs-3.11.174.worker.min.js",
