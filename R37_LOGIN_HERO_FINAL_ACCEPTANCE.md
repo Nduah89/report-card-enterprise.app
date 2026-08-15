@@ -1,11 +1,13 @@
 # Edusentia r37 Login Hero Final Acceptance
 
-Status: approved photographic campus hero asset deployed to live production.
+Status: final v7 photographic campus hero polish deployed to live production; browser visual acceptance remains pending.
 
-Approved hero Git blob SHA: `4c8162d4e10a4508e2897a969824fc685a1fb2e0`
+Final hero Git blob SHA: `d99537c9b9a044085d72d69b9d2751e662b06e63`
 
-Hero deployment commit: `e403e895d968e4429565521c560a7974abb039e5`
+Hero size: `34116` bytes (1280×720 WebP).
 
-The login hero uses the established DOM-backed image layer. Authentication logic, MFA, element IDs, licence bindings, academic data, and the immutable r36 protected-template baseline are unchanged.
+Final login CSS blob SHA: `ae197b1cdef75b7eec937dc43d4d96c7e6afa344`
+
+The login hero uses the established DOM-backed image layer. The v7 polish removes the abstract SVG fallback from the active hero CSS, improves card proportions and responsive positioning, and leaves authentication logic, MFA, element IDs, licence bindings, academic data, and the immutable r36 protected-template baseline unchanged.
 
 Visual acceptance remains conditional on final browser screenshot verification after deployment.
