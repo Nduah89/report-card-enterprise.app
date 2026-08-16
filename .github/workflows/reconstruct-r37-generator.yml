@@ -18,12 +18,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Reconstruct and verify historical final-ui8 generator
+      - name: Reconstruct historical final-ui8 generator
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import base64, gzip, hashlib, json, pathlib, subprocess, re
+          import base64, gzip, hashlib, json, pathlib, subprocess
           ref='2efc8f425162bc863359deb49eb415d43ef1fab3'
           parts=[]
           for name in ('part00.b64','part01.b64'):
@@ -34,11 +34,11 @@ jobs:
           sha=hashlib.sha256(source.encode()).hexdigest()
           expected='baa0ebaff56890e82b5142ed27fadd273efe49dcbecabee82789dd3dbe744d93'
           lines=source.splitlines()
-          keys=('style.css','r37-final','addGeneratedFile','GITHUB_PAGES_FRONTEND','service-worker.js','index.html')
+          keys=('style.css','r37-final','addGeneratedFile','GITHUB_PAGES_FRONTEND','service-worker.js','index.html','edusentia-login')
           hits=[]
           for i,line in enumerate(lines):
               if any(k in line for k in keys):
-                  hits.append({'line':i+1,'text':line[:1200]})
+                  hits.append({'line':i+1,'text':line[:1800]})
           report={
               'historical_ref':ref,
               'source_sha256':sha,
@@ -46,11 +46,9 @@ jobs:
               'matches_live_body_sha256':sha==expected,
               'source_bytes':len(source.encode()),
               'source_lines':len(lines),
-              'interesting_lines':hits[:250]
+              'interesting_lines':hits[:300]
           }
           pathlib.Path('GENERATOR_RECONSTRUCTION_REPORT.json').write_text(json.dumps(report,indent=2)+'\n')
-          if sha != expected:
-              raise SystemExit(f'Historical generator SHA mismatch: {sha} != {expected}')
           PY
       - name: Commit verification report
         shell: bash
@@ -61,3 +59,12 @@ jobs:
           git add GENERATOR_RECONSTRUCTION_REPORT.json
           git commit -m "Record r37 generator reconstruction verification"
           git push
+      - name: Enforce live source match
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('GENERATOR_RECONSTRUCTION_REPORT.json'))
+          if not r['matches_live_body_sha256']:
+              raise SystemExit(f"Historical generator SHA mismatch: {r['source_sha256']} != {r['expected_live_body_sha256']}")
+          PY
