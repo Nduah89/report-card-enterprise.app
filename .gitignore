@@ -1,0 +1,54 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+.tmp/
+tmp/
+temp/
+
+# Logs and editor/OS noise
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Generated release/install artifacts
+*.zip
+*.tgz
+*.tar.gz
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Database/backup exports and transient recovery payloads
+*.dump
+*.backup
+*.sql.gz
+*.sqlite
+*.sqlite3
+backups/
+restore-imports/
+staging/
+
+# Supabase local CLI state
+supabase/.temp/
+
+# Historical release acceptance/marker records belong in Git history or the release archive, not main
+R*_ACCEPTANCE*.md
+R*_FINAL_*RECORD*.md
+R*_LIVE_DEPLOYMENT_MARKER.md
+R*_CANDIDATE*.md
+R*_EDUSENTIA_*IDENTITY.md
