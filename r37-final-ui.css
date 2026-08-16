@@ -1,0 +1,187 @@
+/* Edusentia v7.4.0 r37 final login visual identity v7.
+   Final production polish: high-resolution photographic hero, premium card proportions,
+   responsive positioning. Authentication logic, element IDs, form semantics and licence
+   bindings remain unchanged. */
+.auth-view{
+  position:relative;
+  isolation:isolate;
+  min-height:100vh;
+  overflow:hidden;
+  padding:clamp(28px,4vw,64px);
+  display:grid;
+  place-items:center;
+  background:#041b47;
+}
+.auth-hero-image{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  display:block;
+  width:100%;
+  height:100%;
+  max-width:none;
+  object-fit:cover;
+  object-position:center center;
+  pointer-events:none;
+  user-select:none;
+  background:#041b47;
+}
+.auth-view::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+  background:
+    linear-gradient(90deg,rgba(2,17,48,.02) 0%,rgba(2,17,48,.015) 49%,rgba(2,17,48,.11) 100%);
+}
+.auth-view .auth-card{
+  position:relative;
+  z-index:2;
+  width:min(548px,calc(100vw - 48px));
+  min-height:min(692px,calc(100vh - 58px));
+  margin:0;
+  padding:clamp(40px,3.5vw,56px);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  transform:translateX(clamp(220px,18vw,310px));
+  background:rgba(255,255,255,.988);
+  border:1px solid rgba(255,255,255,.94);
+  border-radius:26px;
+  box-shadow:0 40px 120px rgba(0,16,52,.42),0 0 0 1px rgba(8,45,112,.055);
+  -webkit-backdrop-filter:blur(14px) saturate(115%);
+  backdrop-filter:blur(14px) saturate(115%);
+}
+#authView .brand-lockup{
+  flex-direction:column;
+  justify-content:center;
+  gap:9px;
+  margin:0 0 22px;
+  text-align:center;
+}
+#authView .brand-lockup>img{
+  width:102px;
+  height:102px;
+  object-fit:contain;
+  filter:drop-shadow(0 9px 20px rgba(8,45,112,.14));
+}
+#authView .brand-lockup>div{min-width:0}
+#authView .brand-lockup h1{
+  margin:0 0 5px;
+  color:#082d70;
+  font-size:clamp(27px,2vw,33px);
+  line-height:1.1;
+  letter-spacing:.018em;
+}
+#authView .brand-lockup p{
+  margin:0;
+  color:#a87308;
+  font-size:11px;
+  font-weight:850;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+#authView .auth-card::before{
+  content:"";
+  display:block;
+  width:78%;
+  height:1px;
+  margin:0 auto 24px;
+  background:linear-gradient(90deg,transparent,#d8a22d,transparent);
+}
+#authView #loginForm{gap:17px}
+#authView #loginForm::before{
+  content:"Welcome Back";
+  display:block;
+  grid-column:1/-1;
+  margin:0 0 -2px;
+  color:#082d70;
+  font-size:clamp(31px,2.25vw,38px);
+  line-height:1.12;
+  font-weight:850;
+  letter-spacing:-.028em;
+  text-align:center;
+}
+#authView #loginForm .field:first-of-type::before{
+  content:"Sign in to continue to your account";
+  display:block;
+  margin:-3px 0 13px;
+  color:#65728a;
+  font-size:14px;
+  font-weight:500;
+  text-align:center;
+}
+.auth-view .field>span{
+  color:#253858;
+  font-weight:750;
+}
+.auth-view input,.auth-view .password-wrap{
+  min-height:52px;
+  border-color:#cbd6e6;
+  background:#fff;
+  box-shadow:0 1px 0 rgba(8,45,112,.025);
+}
+.auth-view input:focus,.auth-view .password-wrap:focus-within{
+  border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(13,94,200,.14);
+}
+.auth-view .button.primary{
+  min-height:54px;
+  margin-top:4px;
+  border-radius:10px;
+  background:linear-gradient(135deg,#0a459a,#1269d3);
+  box-shadow:0 14px 30px rgba(13,94,200,.27);
+}
+#authView .auth-card::after{
+  content:"Your trusted partner in academic excellence";
+  display:block;
+  margin-top:24px;
+  color:#7a8799;
+  font-size:11px;
+  font-weight:650;
+  letter-spacing:.02em;
+  text-align:center;
+}
+#mfaView .auth-card{
+  width:min(490px,calc(100vw - 48px));
+  min-height:auto;
+  transform:translateX(clamp(220px,18vw,310px));
+}
+#mfaView .brand-lockup{margin-bottom:24px}
+@media(max-width:1280px){
+  .auth-view .auth-card,#mfaView .auth-card{transform:translateX(17vw)}
+}
+@media(max-width:1040px){
+  .auth-view{padding:28px 22px}
+  .auth-hero-image{object-position:58% center}
+  .auth-view::before{
+    background:linear-gradient(180deg,rgba(3,21,54,.32),rgba(3,21,54,.62));
+  }
+  .auth-view .auth-card,#mfaView .auth-card{transform:none}
+}
+@media(max-width:680px){
+  .auth-view{padding:18px 14px}
+  .auth-hero-image{object-position:60% center}
+  .auth-view::before{
+    background:linear-gradient(180deg,rgba(3,21,54,.52),rgba(3,21,54,.76));
+  }
+  .auth-view .auth-card{
+    width:min(100%,520px);
+    min-height:auto;
+    padding:30px 22px;
+    border-radius:20px;
+  }
+  #authView .brand-lockup{gap:7px;margin-bottom:18px}
+  #authView .brand-lockup>img{width:78px;height:78px}
+  #authView .brand-lockup h1{font-size:24px}
+  #authView #loginForm::before{font-size:29px}
+}
+@media(max-width:420px){
+  .auth-view{padding:12px 10px}
+  .auth-view .auth-card{padding:24px 18px;border-radius:18px}
+  #authView .brand-lockup>img{width:68px;height:68px}
+}
+@media(prefers-reduced-motion:reduce){
+  .auth-view .button,.auth-view .icon-button{transition:none}
+}
