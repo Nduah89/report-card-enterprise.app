@@ -21,33 +21,42 @@ jobs:
       - name: Reconstruct historical final-ui8 generator
         shell: bash
         run: |
-          set -euo pipefail
           python - <<'PY'
-          import base64, gzip, hashlib, json, pathlib, subprocess
+          import base64, gzip, hashlib, json, pathlib, subprocess, traceback
           ref='2efc8f425162bc863359deb49eb415d43ef1fab3'
-          parts=[]
-          for name in ('part00.b64','part01.b64'):
-              raw=subprocess.check_output(['git','show',f'{ref}:r37-final-ui8-generator-payload/{name}'], text=True).strip()
-              parts.append(raw)
-          packed=base64.b64decode(''.join(parts))
-          source=gzip.decompress(packed).decode('utf-8')
-          sha=hashlib.sha256(source.encode()).hexdigest()
           expected='baa0ebaff56890e82b5142ed27fadd273efe49dcbecabee82789dd3dbe744d93'
-          lines=source.splitlines()
-          keys=('style.css','r37-final','addGeneratedFile','GITHUB_PAGES_FRONTEND','service-worker.js','index.html','edusentia-login')
-          hits=[]
-          for i,line in enumerate(lines):
-              if any(k in line for k in keys):
-                  hits.append({'line':i+1,'text':line[:1800]})
-          report={
-              'historical_ref':ref,
-              'source_sha256':sha,
-              'expected_live_body_sha256':expected,
-              'matches_live_body_sha256':sha==expected,
-              'source_bytes':len(source.encode()),
-              'source_lines':len(lines),
-              'interesting_lines':hits[:300]
-          }
+          report={'historical_ref':ref,'expected_live_body_sha256':expected}
+          try:
+              parts=[]
+              for name in ('part00.b64','part01.b64'):
+                  raw=subprocess.check_output(['git','show',f'{ref}:r37-final-ui8-generator-payload/{name}'], text=True)
+                  report[name+'_chars_raw']=len(raw)
+                  cleaned=''.join(raw.split())
+                  report[name+'_chars_clean']=len(cleaned)
+                  parts.append(cleaned)
+              joined=''.join(parts)
+              report['joined_base64_chars']=len(joined)
+              report['joined_mod4']=len(joined)%4
+              packed=base64.b64decode(joined, validate=True)
+              report['packed_bytes']=len(packed)
+              source=gzip.decompress(packed).decode('utf-8')
+              sha=hashlib.sha256(source.encode()).hexdigest()
+              lines=source.splitlines()
+              keys=('style.css','r37-final','addGeneratedFile','GITHUB_PAGES_FRONTEND','service-worker.js','index.html','edusentia-login')
+              hits=[]
+              for i,line in enumerate(lines):
+                  if any(k in line for k in keys):
+                      hits.append({'line':i+1,'text':line[:1800]})
+              report.update({
+                  'ok':True,
+                  'source_sha256':sha,
+                  'matches_live_body_sha256':sha==expected,
+                  'source_bytes':len(source.encode()),
+                  'source_lines':len(lines),
+                  'interesting_lines':hits[:300]
+              })
+          except Exception as exc:
+              report.update({'ok':False,'exception_type':type(exc).__name__,'exception':str(exc),'traceback':traceback.format_exc()[-4000:]})
           pathlib.Path('GENERATOR_RECONSTRUCTION_REPORT.json').write_text(json.dumps(report,indent=2)+'\n')
           PY
       - name: Commit verification report
@@ -57,7 +66,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add GENERATOR_RECONSTRUCTION_REPORT.json
-          git commit -m "Record r37 generator reconstruction verification"
+          git commit -m "Record r37 generator reconstruction diagnostic"
           git push
       - name: Enforce live source match
         shell: bash
@@ -65,6 +74,8 @@ jobs:
           python - <<'PY'
           import json
           r=json.load(open('GENERATOR_RECONSTRUCTION_REPORT.json'))
-          if not r['matches_live_body_sha256']:
-              raise SystemExit(f"Historical generator SHA mismatch: {r['source_sha256']} != {r['expected_live_body_sha256']}")
+          if not r.get('ok'):
+              raise SystemExit(f"Generator reconstruction failed: {r.get('exception_type')}: {r.get('exception')}")
+          if not r.get('matches_live_body_sha256'):
+              raise SystemExit(f"Historical generator SHA mismatch: {r.get('source_sha256')} != {r.get('expected_live_body_sha256')}")
           PY
