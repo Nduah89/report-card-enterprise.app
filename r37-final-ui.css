@@ -1,7 +1,7 @@
-/* Edusentia v7.4.0 r37 final login visual identity v9.
-   Production visual source: approved simplified Edusentia academic login artwork.
-   The real authentication card masks the artwork's decorative login mockup on desktop;
-   responsive layouts shift and soften the artwork so only real DOM controls are actionable.
+/* Edusentia v7.4.0 r37 final login visual identity v10 clarity.
+   Production visual source: approved 1672x941 Edusentia academic login artwork.
+   High-fidelity background is rendered without blur, soft-focus filters or opacity reduction.
+   The real authentication card masks the artwork's decorative login mockup on desktop.
    Authentication logic, element IDs, form semantics and licence bindings remain unchanged. */
 .auth-view{
   position:relative;
@@ -23,6 +23,9 @@
   max-width:none;
   object-fit:cover;
   object-position:center center;
+  image-rendering:auto;
+  opacity:1;
+  filter:none;
   pointer-events:none;
   user-select:none;
   background:#f5f8fe;
@@ -33,8 +36,7 @@
   inset:0;
   z-index:1;
   pointer-events:none;
-  background:
-    linear-gradient(90deg,rgba(255,255,255,.015) 0%,rgba(255,255,255,.01) 48%,rgba(245,249,255,.08) 100%);
+  background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,0) 48%,rgba(245,249,255,.025) 100%);
 }
 .auth-view .auth-card{
   position:relative;
@@ -113,10 +115,7 @@
   font-weight:500;
   text-align:center;
 }
-.auth-view .field>span{
-  color:#253858;
-  font-weight:750;
-}
+.auth-view .field>span{color:#253858;font-weight:750}
 .auth-view input,.auth-view .password-wrap{
   min-height:52px;
   border-color:#cbd6e6;
@@ -155,18 +154,14 @@
 }
 @media(max-width:1040px){
   .auth-view{padding:28px 22px}
-  .auth-hero-image{object-position:left center;opacity:.26;filter:saturate(.82) contrast(.96)}
-  .auth-view::before{
-    background:rgba(247,250,255,.76);
-  }
+  .auth-hero-image{object-position:left center;opacity:1;filter:none}
+  .auth-view::before{background:rgba(247,250,255,.12)}
   .auth-view .auth-card,#mfaView .auth-card{transform:none}
 }
 @media(max-width:680px){
   .auth-view{padding:18px 14px}
-  .auth-hero-image{object-position:left center;opacity:.18;filter:saturate(.70) contrast(.94)}
-  .auth-view::before{
-    background:rgba(250,252,255,.88);
-  }
+  .auth-hero-image{object-position:left center;opacity:1;filter:none}
+  .auth-view::before{background:rgba(250,252,255,.18)}
   .auth-view .auth-card{
     width:min(100%,520px);
     min-height:auto;
