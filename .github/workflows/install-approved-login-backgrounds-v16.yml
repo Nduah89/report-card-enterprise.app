@@ -69,9 +69,10 @@ jobs:
           cp /tmp/bg3.webp assets/approved-login-background-3.webp
           cp /tmp/bg2.webp assets/edusentia-login-background-final.webp
 
-          sed -i 's/r37-final-ui-11-asset-repair/r37-final-ui-16-approved-bg2/g' index.html service-worker.js
+          sed -i 's/r37-final-ui-11-asset-repair/r37-final-ui-16-approved-bg2/g' index.html
+          sed -i 's/r37-edusentia-final-ui-11-asset-repair/r37-edusentia-final-ui-16-approved-bg2/g' service-worker.js
           grep -q 'r37-final-ui-16-approved-bg2' index.html
-          grep -q 'r37-final-ui-16-approved-bg2' service-worker.js
+          grep -q 'r37-edusentia-final-ui-16-approved-bg2' service-worker.js
 
           rm -rf .asset-staging/approved-bg2 .asset-staging/approved-bg3
           rm -rf .asset-staging/exact-academic-bg .asset-staging/exact-academic-bg-v2 .asset-staging/exact-academic-bg-v3
