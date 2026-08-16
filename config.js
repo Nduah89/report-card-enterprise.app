@@ -26,3 +26,48 @@ window.RCE_CONFIG = Object.freeze({
   defaultReportTemplatePath: "assets/approved-terminal-report-template.png"
 });
 window.NIS_CONFIG = window.RCE_CONFIG;
+
+// r37 transport hardening: platform-package-manager v43 is intentionally kept
+// integrity-protected. Browser calls are routed through the JWT-protected
+// platform-package-gateway so CORS preflight never has to boot the large v43
+// package engine. All other Supabase Edge Function routes are unchanged.
+(() => {
+  "use strict";
+  const sdk = window.supabase;
+  if (!sdk || typeof sdk.createClient !== "function" || sdk.__edusentiaPackageGatewayInstalled) return;
+  const originalCreateClient = sdk.createClient.bind(sdk);
+  sdk.createClient = (...args) => {
+    const client = originalCreateClient(...args);
+    try {
+      const functionsClient = client.functions;
+      if (functionsClient && typeof functionsClient.invoke === "function") {
+        const originalInvoke = functionsClient.invoke.bind(functionsClient);
+        functionsClient.invoke = (functionName, options) => originalInvoke(
+          functionName === "platform-package-manager" ? "platform-package-gateway" : functionName,
+          options
+        );
+        // Supabase exposes functions through a getter. Pin this wrapped instance
+        // to the created client so later client.functions.invoke calls use the
+        // same transport-safe FunctionsClient.
+        Object.defineProperty(client, "functions", {
+          value: functionsClient,
+          enumerable: false,
+          configurable: false,
+          writable: false
+        });
+      }
+    } catch (error) {
+      console.error("Edusentia package transport bootstrap failed", error);
+    }
+    return client;
+  };
+  try {
+    Object.defineProperty(sdk, "__edusentiaPackageGatewayInstalled", {
+      value: true,
+      enumerable: false,
+      configurable: false
+    });
+  } catch {
+    sdk.__edusentiaPackageGatewayInstalled = true;
+  }
+})();
