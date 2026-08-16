@@ -46,9 +46,13 @@ staging/
 # Supabase local CLI state
 supabase/.temp/
 
-# Historical release acceptance/marker records belong in Git history or the release archive, not main
+# Historical release acceptance/deployment records belong in Git history or the release archive, not main
 R*_ACCEPTANCE*.md
 R*_FINAL_*RECORD*.md
 R*_LIVE_DEPLOYMENT_MARKER.md
 R*_CANDIDATE*.md
 R*_EDUSENTIA_*IDENTITY.md
+R*_DEPLOYMENT*.md
+
+# Temporary release assembly payloads should not return to production main
+*-generator-payload/
