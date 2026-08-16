@@ -1,0 +1,63 @@
+name: Reconstruct r37 generator source
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/reconstruct-r37-generator.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  reconstruct:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct and verify historical final-ui8 generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64, gzip, hashlib, json, pathlib, subprocess, re
+          ref='2efc8f425162bc863359deb49eb415d43ef1fab3'
+          parts=[]
+          for name in ('part00.b64','part01.b64'):
+              raw=subprocess.check_output(['git','show',f'{ref}:r37-final-ui8-generator-payload/{name}'], text=True).strip()
+              parts.append(raw)
+          packed=base64.b64decode(''.join(parts))
+          source=gzip.decompress(packed).decode('utf-8')
+          sha=hashlib.sha256(source.encode()).hexdigest()
+          expected='baa0ebaff56890e82b5142ed27fadd273efe49dcbecabee82789dd3dbe744d93'
+          lines=source.splitlines()
+          keys=('style.css','r37-final','addGeneratedFile','GITHUB_PAGES_FRONTEND','service-worker.js','index.html')
+          hits=[]
+          for i,line in enumerate(lines):
+              if any(k in line for k in keys):
+                  hits.append({'line':i+1,'text':line[:1200]})
+          report={
+              'historical_ref':ref,
+              'source_sha256':sha,
+              'expected_live_body_sha256':expected,
+              'matches_live_body_sha256':sha==expected,
+              'source_bytes':len(source.encode()),
+              'source_lines':len(lines),
+              'interesting_lines':hits[:250]
+          }
+          pathlib.Path('GENERATOR_RECONSTRUCTION_REPORT.json').write_text(json.dumps(report,indent=2)+'\n')
+          if sha != expected:
+              raise SystemExit(f'Historical generator SHA mismatch: {sha} != {expected}')
+          PY
+      - name: Commit verification report
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add GENERATOR_RECONSTRUCTION_REPORT.json
+          git commit -m "Record r37 generator reconstruction verification"
+          git push
