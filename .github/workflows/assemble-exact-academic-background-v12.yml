@@ -3,7 +3,7 @@ name: Assemble exact Edusentia academic background v12
 on:
   push:
     branches:
-      - fix/r37-exact-academic-background-v12-20260816
+      - main
     paths:
       - ".github/workflows/assemble-exact-academic-background-v12.yml"
 
@@ -46,7 +46,7 @@ jobs:
           rm -rf .asset-staging/exact-academic-bg
           rm -f .github/workflows/assemble-exact-academic-background-v12.yml
 
-      - name: Commit verified production-ready branch
+      - name: Commit verified production-ready asset
         shell: bash
         run: |
           set -euo pipefail
