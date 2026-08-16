@@ -1,7 +1,8 @@
-/* Edusentia v7.4.0 r37 final login visual identity v7.
-   Final production polish: high-resolution photographic hero, premium card proportions,
-   responsive positioning. Authentication logic, element IDs, form semantics and licence
-   bindings remain unchanged. */
+/* Edusentia v7.4.0 r37 final login visual identity v9.
+   Production visual source: approved simplified Edusentia academic login artwork.
+   The real authentication card masks the artwork's decorative login mockup on desktop;
+   responsive layouts shift and soften the artwork so only real DOM controls are actionable.
+   Authentication logic, element IDs, form semantics and licence bindings remain unchanged. */
 .auth-view{
   position:relative;
   isolation:isolate;
@@ -10,7 +11,7 @@
   padding:clamp(28px,4vw,64px);
   display:grid;
   place-items:center;
-  background:#041b47;
+  background:#f5f8fe;
 }
 .auth-hero-image{
   position:absolute;
@@ -24,7 +25,7 @@
   object-position:center center;
   pointer-events:none;
   user-select:none;
-  background:#041b47;
+  background:#f5f8fe;
 }
 .auth-view::before{
   content:"";
@@ -33,19 +34,19 @@
   z-index:1;
   pointer-events:none;
   background:
-    linear-gradient(90deg,rgba(2,17,48,.02) 0%,rgba(2,17,48,.015) 49%,rgba(2,17,48,.11) 100%);
+    linear-gradient(90deg,rgba(255,255,255,.015) 0%,rgba(255,255,255,.01) 48%,rgba(245,249,255,.08) 100%);
 }
 .auth-view .auth-card{
   position:relative;
   z-index:2;
-  width:min(548px,calc(100vw - 48px));
-  min-height:min(692px,calc(100vh - 58px));
+  width:min(630px,calc(100vw - 48px));
+  min-height:min(700px,calc(100vh - 58px));
   margin:0;
   padding:clamp(40px,3.5vw,56px);
   display:flex;
   flex-direction:column;
   justify-content:center;
-  transform:translateX(clamp(220px,18vw,310px));
+  transform:translateX(clamp(255px,24.5vw,475px));
   background:rgba(255,255,255,.988);
   border:1px solid rgba(255,255,255,.94);
   border-radius:26px;
@@ -146,25 +147,25 @@
 #mfaView .auth-card{
   width:min(490px,calc(100vw - 48px));
   min-height:auto;
-  transform:translateX(clamp(220px,18vw,310px));
+  transform:translateX(clamp(255px,24.5vw,475px));
 }
 #mfaView .brand-lockup{margin-bottom:24px}
 @media(max-width:1280px){
-  .auth-view .auth-card,#mfaView .auth-card{transform:translateX(17vw)}
+  .auth-view .auth-card,#mfaView .auth-card{transform:translateX(22vw)}
 }
 @media(max-width:1040px){
   .auth-view{padding:28px 22px}
-  .auth-hero-image{object-position:58% center}
+  .auth-hero-image{object-position:left center;opacity:.26;filter:saturate(.82) contrast(.96)}
   .auth-view::before{
-    background:linear-gradient(180deg,rgba(3,21,54,.32),rgba(3,21,54,.62));
+    background:rgba(247,250,255,.76);
   }
   .auth-view .auth-card,#mfaView .auth-card{transform:none}
 }
 @media(max-width:680px){
   .auth-view{padding:18px 14px}
-  .auth-hero-image{object-position:60% center}
+  .auth-hero-image{object-position:left center;opacity:.18;filter:saturate(.70) contrast(.94)}
   .auth-view::before{
-    background:linear-gradient(180deg,rgba(3,21,54,.52),rgba(3,21,54,.76));
+    background:rgba(250,252,255,.88);
   }
   .auth-view .auth-card{
     width:min(100%,520px);
